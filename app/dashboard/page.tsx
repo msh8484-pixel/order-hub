@@ -2,10 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/lib/supabase";
-import {
-  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
-  PieChart, Pie, Cell, Legend,
-} from "recharts";
+import StatsTab from "./StatsTab";
 
 type OrderItem = {
   product_name: string;
@@ -28,10 +25,6 @@ type CategoryTotal = {
   total_pieces: number;
 };
 
-type MonthlyData = { month: string; label: string; pieces: number };
-type CategoryStat = { category: string; pieces: number };
-type StoreStat = { store: string; pieces: number };
-
 const STATUS_LABEL: Record<string, string> = {
   pending: "접수",
   confirmed: "확인됨",
@@ -50,7 +43,6 @@ const STATUS_STYLE: Record<string, string> = {
 
 const DAY_KO = ["일", "월", "화", "수", "목", "금", "토"];
 const CATEGORY_ORDER = ["쑥인절미", "약밥", "무설탕", "개떡", "찹쌀떡", "찰떡", "설기", "현미", "음료", "답례떡", "기타"];
-const PIE_COLORS = ["#059669", "#10b981", "#34d399", "#6ee7b7", "#a7f3d0", "#d1fae5", "#047857", "#065f46", "#064e3b", "#022c22", "#6b7280"];
 
 function buildStrip(centerDate: string, count = 15) {
   const center = new Date(centerDate);
@@ -97,18 +89,6 @@ export default function DashboardPage() {
 
   const stripDays = buildStrip(selectedDate, 15);
   const calWeeks = buildCalendar(calYear, calMonth);
-
-  // --- 통계 state ---
-  const [statsLoading, setStatsLoading] = useState(false);
-  const [monthlyData, setMonthlyData] = useState<MonthlyData[]>([]);
-  const [categoryStats, setCategoryStats] = useState<CategoryStat[]>([]);
-  const [storeStats, setStoreStats] = useState<StoreStat[]>([]);
-  const [thisMonthPieces, setThisMonthPieces] = useState(0);
-  const [lastMonthPieces, setLastMonthPieces] = useState(0);
-  const [thisMonthOrders, setThisMonthOrders] = useState(0);
-  const [aiSummary, setAiSummary] = useState("");
-  const [aiLoading, setAiLoading] = useState(false);
-  const [statsLoaded, setStatsLoaded] = useState(false);
 
   useEffect(() => {
     const el = stripRef.current;
@@ -185,101 +165,6 @@ export default function DashboardPage() {
     return () => clearInterval(interval);
   }, [load]);
 
-  const loadStats = useCallback(async () => {
-    setStatsLoading(true);
-    const now = new Date();
-    const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1).toISOString().slice(0, 10);
-    const thisMonthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
-    const lastMonthD = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const lastMonthStart = lastMonthD.toISOString().slice(0, 10);
-    const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0).toISOString().slice(0, 10);
-
-    const { data } = await supabase
-      .from("order_items")
-      .select("quantity, orders!inner(order_date, status, source, store_id, stores(name)), products(pieces_per_unit, category)")
-      .gte("orders.order_date", sixMonthsAgo)
-      .neq("orders.status", "cancelled");
-
-    if (!data) { setStatsLoading(false); return; }
-
-    const monthMap = new Map<string, number>();
-    const catMap = new Map<string, number>();
-    const storeMap = new Map<string, number>();
-    const orderSet = new Set<string>();
-    let thisMo = 0;
-    let lastMo = 0;
-
-    for (const item of data) {
-      const order = item.orders as any;
-      const ppu = (item.products as any)?.pieces_per_unit ?? 1;
-      const cat = (item.products as any)?.category ?? "기타";
-      const pieces = item.quantity * ppu;
-      const date = order.order_date as string;
-      const monthKey = date.slice(0, 7);
-
-      monthMap.set(monthKey, (monthMap.get(monthKey) || 0) + pieces);
-
-      if (date >= thisMonthStart) {
-        catMap.set(cat, (catMap.get(cat) || 0) + pieces);
-        thisMo += pieces;
-        orderSet.add(order.id || date + cat);
-        if (order.source === "store" && order.stores?.name) {
-          storeMap.set(order.stores.name, (storeMap.get(order.stores.name) || 0) + pieces);
-        }
-      }
-      if (date >= lastMonthStart && date <= lastMonthEnd) {
-        lastMo += pieces;
-      }
-    }
-
-    const monthly: MonthlyData[] = [];
-    for (let i = 5; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
-      monthly.push({ month: key, label: `${d.getMonth() + 1}월`, pieces: monthMap.get(key) || 0 });
-    }
-
-    const categories: CategoryStat[] = CATEGORY_ORDER
-      .filter(c => catMap.has(c))
-      .map(c => ({ category: c, pieces: catMap.get(c)! }))
-      .concat([...catMap.keys()].filter(c => !CATEGORY_ORDER.includes(c)).map(c => ({ category: c, pieces: catMap.get(c)! })));
-
-    const stores: StoreStat[] = [...storeMap.entries()]
-      .map(([store, pieces]) => ({ store, pieces }))
-      .sort((a, b) => b.pieces - a.pieces)
-      .slice(0, 6);
-
-    setMonthlyData(monthly);
-    setCategoryStats(categories);
-    setStoreStats(stores);
-    setThisMonthPieces(thisMo);
-    setLastMonthPieces(lastMo);
-    setThisMonthOrders(orderSet.size);
-    setStatsLoading(false);
-    setStatsLoaded(true);
-  }, []);
-
-  useEffect(() => {
-    if (mainTab === "stats" && !statsLoaded) loadStats();
-  }, [mainTab, statsLoaded, loadStats]);
-
-  async function getAiSummary() {
-    setAiLoading(true);
-    setAiSummary("");
-    try {
-      const res = await fetch("/api/stats/summary", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ thisMonth: thisMonthPieces, lastMonth: lastMonthPieces, monthly: monthlyData, categories: categoryStats, stores: storeStats }),
-      });
-      const json = await res.json();
-      setAiSummary(json.summary || json.error || "요약 실패");
-    } catch {
-      setAiSummary("요약 요청에 실패했습니다.");
-    }
-    setAiLoading(false);
-  }
-
   async function updateStatus(orderId: string, status: string) {
     await supabase.from("orders").update({ status }).eq("id", orderId);
     load();
@@ -292,11 +177,6 @@ export default function DashboardPage() {
   const selectedLabel = new Date(selectedDate).toLocaleDateString("ko-KR", {
     year: "numeric", month: "long", day: "numeric", weekday: "short",
   });
-
-  const now = new Date();
-  const thisMonthLabel = `${now.getFullYear()}년 ${now.getMonth() + 1}월`;
-  const pieceDiff = thisMonthPieces - lastMonthPieces;
-  const pieceDiffPct = lastMonthPieces > 0 ? Math.round((pieceDiff / lastMonthPieces) * 100) : 0;
 
   return (
     <div className="min-h-screen bg-stone-50 pb-20">
@@ -315,11 +195,11 @@ export default function DashboardPage() {
               </button>
             )}
             {mainTab === "stats" && (
-              <p className="text-stone-400 text-xs mt-0.5">{thisMonthLabel} 기준</p>
+              <p className="text-stone-400 text-xs mt-0.5">통계 분석</p>
             )}
           </div>
           <button
-            onClick={() => mainTab === "orders" ? load() : loadStats()}
+            onClick={() => load()}
             className="text-emerald-700 text-sm font-medium"
           >
             새로고침
@@ -519,136 +399,7 @@ export default function DashboardPage() {
       )}
 
       {/* ===================== 통계 분석 탭 ===================== */}
-      {mainTab === "stats" && (
-        <div className="px-4 pt-4 space-y-4 pb-6">
-          {statsLoading ? (
-            <div className="text-center text-stone-400 py-16 text-sm">통계 불러오는 중...</div>
-          ) : (
-            <>
-              {/* 이번달 vs 지난달 요약 카드 */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="bg-white rounded-xl p-4 border border-stone-200">
-                  <p className="text-stone-400 text-xs mb-1">이번달 생산량</p>
-                  <p className="text-2xl font-bold text-emerald-700">{thisMonthPieces.toLocaleString()}<span className="text-sm font-normal text-stone-400 ml-1">개</span></p>
-                  {lastMonthPieces > 0 && (
-                    <p className={`text-xs mt-1 font-medium ${pieceDiff >= 0 ? "text-emerald-600" : "text-red-500"}`}>
-                      {pieceDiff >= 0 ? "▲" : "▼"} {Math.abs(pieceDiffPct)}% 전달 대비
-                    </p>
-                  )}
-                </div>
-                <div className="bg-white rounded-xl p-4 border border-stone-200">
-                  <p className="text-stone-400 text-xs mb-1">지난달 생산량</p>
-                  <p className="text-2xl font-bold text-stone-700">{lastMonthPieces.toLocaleString()}<span className="text-sm font-normal text-stone-400 ml-1">개</span></p>
-                  <p className="text-xs mt-1 text-stone-400">기준 달</p>
-                </div>
-              </div>
-
-              {/* 월별 생산량 추이 */}
-              <div className="bg-white rounded-xl border border-stone-200 overflow-hidden">
-                <div className="px-4 py-3 border-b border-stone-100">
-                  <p className="text-stone-700 font-bold text-sm">월별 생산량 추이</p>
-                  <p className="text-stone-400 text-xs">최근 6개월</p>
-                </div>
-                <div className="px-2 py-4">
-                  <ResponsiveContainer width="100%" height={180}>
-                    <BarChart data={monthlyData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
-                      <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#78716c" }} axisLine={false} tickLine={false} />
-                      <YAxis tick={{ fontSize: 10, fill: "#a8a29e" }} axisLine={false} tickLine={false} tickFormatter={(v) => v >= 1000 ? `${Math.round(v / 1000)}k` : v} />
-                      <Tooltip
-                        contentStyle={{ background: "#fff", border: "1px solid #e7e5e4", borderRadius: 8, fontSize: 12 }}
-                        formatter={(v) => [`${v.toLocaleString()}개`, "생산량"]}
-                      />
-                      <Bar dataKey="pieces" fill="#059669" radius={[4, 4, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </div>
-
-              {/* 이번달 카테고리별 비중 */}
-              {categoryStats.length > 0 && (
-                <div className="bg-white rounded-xl border border-stone-200 overflow-hidden">
-                  <div className="px-4 py-3 border-b border-stone-100">
-                    <p className="text-stone-700 font-bold text-sm">이번달 카테고리별</p>
-                    <p className="text-stone-400 text-xs">생산량 비중</p>
-                  </div>
-                  <div className="flex items-center gap-0 px-2 py-4">
-                    <ResponsiveContainer width="45%" height={160}>
-                      <PieChart>
-                        <Pie data={categoryStats} dataKey="pieces" nameKey="category" cx="50%" cy="50%" outerRadius={70} innerRadius={35}>
-                          {categoryStats.map((_, i) => (
-                            <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-                          ))}
-                        </Pie>
-                        <Tooltip
-                          contentStyle={{ background: "#fff", border: "1px solid #e7e5e4", borderRadius: 8, fontSize: 12 }}
-                          formatter={(v) => [`${v.toLocaleString()}개`]}
-                        />
-                      </PieChart>
-                    </ResponsiveContainer>
-                    <div className="flex-1 space-y-1.5 pr-4">
-                      {categoryStats.slice(0, 6).map((c, i) => (
-                        <div key={c.category} className="flex items-center gap-2">
-                          <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} />
-                          <span className="text-stone-600 text-xs flex-1 truncate">{c.category}</span>
-                          <span className="text-stone-900 text-xs font-semibold">{c.pieces.toLocaleString()}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
-
-              {/* 이번달 매장별 발주 순위 */}
-              {storeStats.length > 0 && (
-                <div className="bg-white rounded-xl border border-stone-200 overflow-hidden">
-                  <div className="px-4 py-3 border-b border-stone-100">
-                    <p className="text-stone-700 font-bold text-sm">이번달 매장별 발주 순위</p>
-                  </div>
-                  <div className="px-2 py-4">
-                    <ResponsiveContainer width="100%" height={Math.max(120, storeStats.length * 36)}>
-                      <BarChart data={storeStats} layout="vertical" margin={{ top: 0, right: 40, left: 8, bottom: 0 }}>
-                        <XAxis type="number" tick={{ fontSize: 10, fill: "#a8a29e" }} axisLine={false} tickLine={false} tickFormatter={(v) => v >= 1000 ? `${Math.round(v / 1000)}k` : v} />
-                        <YAxis type="category" dataKey="store" tick={{ fontSize: 11, fill: "#78716c" }} axisLine={false} tickLine={false} width={52} />
-                        <Tooltip
-                          contentStyle={{ background: "#fff", border: "1px solid #e7e5e4", borderRadius: 8, fontSize: 12 }}
-                          formatter={(v) => [`${v.toLocaleString()}개`, "생산량"]}
-                        />
-                        <Bar dataKey="pieces" fill="#10b981" radius={[0, 4, 4, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-              )}
-
-              {/* AI 요약 */}
-              <div className="bg-white rounded-xl border border-stone-200 overflow-hidden">
-                <div className="px-4 py-3 border-b border-stone-100 flex items-center justify-between">
-                  <div>
-                    <p className="text-stone-700 font-bold text-sm">AI 현황 요약</p>
-                    <p className="text-stone-400 text-xs">Claude가 데이터를 분석합니다</p>
-                  </div>
-                  <button
-                    onClick={getAiSummary}
-                    disabled={aiLoading}
-                    className="bg-emerald-700 hover:bg-emerald-800 disabled:bg-stone-200 disabled:text-stone-400 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors"
-                  >
-                    {aiLoading ? "분석 중..." : "분석하기"}
-                  </button>
-                </div>
-                {aiSummary ? (
-                  <div className="px-4 py-4">
-                    <p className="text-stone-700 text-sm leading-relaxed whitespace-pre-line">{aiSummary}</p>
-                  </div>
-                ) : (
-                  <div className="px-4 py-6 text-center text-stone-400 text-sm">
-                    분석하기 버튼을 누르면 AI가 현황을 요약합니다
-                  </div>
-                )}
-              </div>
-            </>
-          )}
-        </div>
-      )}
+      {mainTab === "stats" && <StatsTab />}
     </div>
   );
 }
