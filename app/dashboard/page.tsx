@@ -3,13 +3,20 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 
+type OrderItem = {
+  product_name: string;
+  quantity: number;
+  pieces_per_unit: number;
+  category: string;
+};
+
 type StoreOrder = {
   store_id: string;
   store_name: string;
   order_id: string;
   status: string;
   submitted_at: string;
-  items: { product_name: string; quantity: number }[];
+  items: OrderItem[];
 };
 
 type CategoryTotal = {
@@ -101,7 +108,7 @@ export default function DashboardPage() {
     // 발주 목록
     const { data: orderData, error } = await supabase
       .from("orders")
-      .select(`id, status, created_at, store_id, stores(name), order_items(product_name, quantity)`)
+      .select(`id, status, created_at, store_id, stores(name), order_items(product_name, quantity, products(pieces_per_unit, category))`)
       .eq("order_date", selectedDate)
       .eq("source", "store")
       .neq("status", "cancelled")
@@ -115,7 +122,12 @@ export default function DashboardPage() {
       order_id: row.id,
       status: row.status,
       submitted_at: row.created_at,
-      items: row.order_items || [],
+      items: (row.order_items || []).map((it: any) => ({
+        product_name: it.product_name,
+        quantity: it.quantity,
+        pieces_per_unit: it.products?.pieces_per_unit ?? 1,
+        category: it.products?.category ?? "기타",
+      })),
     })));
 
     // 카테고리별 생산량
@@ -296,13 +308,32 @@ export default function DashboardPage() {
                   </span>
                 </div>
 
-                <div className="space-y-1 mb-3">
-                  {order.items.map((item, i) => (
-                    <div key={i} className="flex justify-between text-sm">
-                      <span className="text-stone-600">{item.product_name}</span>
-                      <span className="text-stone-900 font-semibold">{item.quantity}세트</span>
-                    </div>
-                  ))}
+                <div className="mb-3 space-y-2">
+                  {(() => {
+                    const catMap = new Map<string, OrderItem[]>();
+                    for (const it of order.items) {
+                      const c = it.category || "기타";
+                      if (!catMap.has(c)) catMap.set(c, []);
+                      catMap.get(c)!.push(it);
+                    }
+                    return CATEGORY_ORDER
+                      .filter(c => catMap.has(c))
+                      .concat([...catMap.keys()].filter(c => !CATEGORY_ORDER.includes(c)))
+                      .map(cat => (
+                        <div key={cat}>
+                          <p className="text-stone-400 text-xs font-semibold mb-1">{cat}</p>
+                          {catMap.get(cat)!.map((item, i) => {
+                            const pieces = item.quantity * item.pieces_per_unit;
+                            return (
+                              <div key={i} className="flex justify-between text-sm py-0.5">
+                                <span className="text-stone-600">{item.product_name}</span>
+                                <span className="text-stone-900 font-semibold">{pieces.toLocaleString()}개</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ));
+                  })()}
                 </div>
 
                 <div className="flex gap-2 pt-3 border-t border-stone-100">
