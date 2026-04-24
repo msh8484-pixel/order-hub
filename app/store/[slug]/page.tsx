@@ -149,29 +149,42 @@ export default function StorePage() {
             <h3 className="text-gray-400 text-xs font-semibold uppercase tracking-wider mb-2">{category}</h3>
             <div className="space-y-2">
               {items.map((product) => (
-                <div key={product.id} className="flex items-center justify-between bg-gray-800 rounded-xl px-4 py-3">
-                  <span className="text-white text-sm flex-1">{product.name}</span>
-                  <div className="flex items-center gap-3">
-                    <button
-                      onClick={() => setQty(product.id, (quantities[product.id] || 0) - 1)}
-                      className="w-8 h-8 rounded-full bg-gray-700 text-gray-300 font-bold text-lg flex items-center justify-center"
-                    >
-                      -
-                    </button>
-                    <input
-                      type="number"
-                      min={0}
-                      value={quantities[product.id] || ""}
-                      onChange={(e) => setQty(product.id, parseInt(e.target.value) || 0)}
-                      placeholder="0"
-                      className="w-14 text-center bg-gray-700 text-white rounded-lg py-1 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
-                    />
-                    <button
-                      onClick={() => setQty(product.id, (quantities[product.id] || 0) + 1)}
-                      className="w-8 h-8 rounded-full bg-gray-700 text-gray-300 font-bold text-lg flex items-center justify-center"
-                    >
-                      +
-                    </button>
+                <div key={product.id} className="bg-gray-800 rounded-xl px-4 py-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-white text-sm flex-1">{product.name}</span>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setQty(product.id, (quantities[product.id] || 0) - 1)}
+                        className="w-7 h-7 rounded-full bg-gray-700 text-gray-300 font-bold flex items-center justify-center"
+                      >
+                        -
+                      </button>
+                      <input
+                        type="number"
+                        min={0}
+                        value={quantities[product.id] || ""}
+                        onChange={(e) => setQty(product.id, parseInt(e.target.value) || 0)}
+                        placeholder="0"
+                        className="w-12 text-center bg-gray-700 text-white rounded-lg py-1 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
+                      />
+                      <button
+                        onClick={() => setQty(product.id, (quantities[product.id] || 0) + 1)}
+                        className="w-7 h-7 rounded-full bg-gray-700 text-gray-300 font-bold flex items-center justify-center"
+                      >
+                        +
+                      </button>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    {[5, 10, 20, 30].map((n) => (
+                      <button
+                        key={n}
+                        onClick={() => setQty(product.id, (quantities[product.id] || 0) + n)}
+                        className="flex-1 text-xs bg-gray-700 hover:bg-gray-600 text-gray-300 rounded-lg py-1 transition-colors"
+                      >
+                        +{n}
+                      </button>
+                    ))}
                   </div>
                 </div>
               ))}
