@@ -5,11 +5,18 @@ import { supabase } from "@/lib/supabase";
 
 type ProductionItem = {
   product_name: string;
+  category: string;
   set_qty: number;
   pieces_per_unit: number;
   total_pieces: number;
   sources: { source: string; qty: number }[];
   by_store: { store_name: string; qty: number }[];
+};
+
+type CategoryGroup = {
+  category: string;
+  total_pieces: number;
+  items: ProductionItem[];
 };
 
 type StoreItem = {
@@ -26,9 +33,12 @@ const SOURCE_LABELS: Record<string, string> = {
   chat: "발주방",
 };
 
+const CATEGORY_ORDER = ["쑥인절미", "약밥", "무설탕", "개떡", "찹쌀떡", "찰떡", "설기", "현미", "음료", "답례떡", "기타"];
+
 type Tab = "total" | "store" | "print";
 
 export default function ProductionPage() {
+  const [categoryGroups, setCategoryGroups] = useState<CategoryGroup[]>([]);
   const [items, setItems] = useState<ProductionItem[]>([]);
   const [storeItems, setStoreItems] = useState<StoreItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -44,14 +54,16 @@ export default function ProductionPage() {
         product_name,
         quantity,
         orders!inner(source, order_date, status, store_id, stores(name)),
-        products(pieces_per_unit)
+        products(pieces_per_unit, category)
       `)
       .eq("orders.order_date", today)
       .neq("orders.status", "cancelled");
 
     if (error) { console.error(error); setLoading(false); return; }
 
+    // 품목별 집계
     const map = new Map<string, {
+      category: string;
       set_qty: number;
       pieces_per_unit: number;
       sources: Map<string, number>;
@@ -65,17 +77,19 @@ export default function ProductionPage() {
       const storeName = order.stores?.name || "온라인";
       const setQty = item.quantity;
       const ppu = (item.products as any)?.pieces_per_unit ?? 1;
+      const category = (item.products as any)?.category ?? "기타";
 
-      if (!map.has(name)) map.set(name, { set_qty: 0, pieces_per_unit: ppu, sources: new Map(), stores: new Map() });
+      if (!map.has(name)) map.set(name, { category, set_qty: 0, pieces_per_unit: ppu, sources: new Map(), stores: new Map() });
       const entry = map.get(name)!;
       entry.set_qty += setQty;
       entry.sources.set(source, (entry.sources.get(source) || 0) + setQty);
       entry.stores.set(storeName, (entry.stores.get(storeName) || 0) + setQty);
     }
 
-    const result: ProductionItem[] = Array.from(map.entries())
-      .map(([name, { set_qty, pieces_per_unit, sources, stores }]) => ({
+    const allItems: ProductionItem[] = Array.from(map.entries())
+      .map(([name, { category, set_qty, pieces_per_unit, sources, stores }]) => ({
         product_name: name,
+        category,
         set_qty,
         pieces_per_unit,
         total_pieces: set_qty * pieces_per_unit,
@@ -84,9 +98,34 @@ export default function ProductionPage() {
       }))
       .sort((a, b) => b.total_pieces - a.total_pieces);
 
-    setItems(result);
+    setItems(allItems);
 
-    // 매장별
+    // 카테고리별 그룹
+    const catMap = new Map<string, ProductionItem[]>();
+    for (const item of allItems) {
+      const cat = item.category || "기타";
+      if (!catMap.has(cat)) catMap.set(cat, []);
+      catMap.get(cat)!.push(item);
+    }
+
+    const groups: CategoryGroup[] = CATEGORY_ORDER
+      .filter(cat => catMap.has(cat))
+      .map(cat => ({
+        category: cat,
+        total_pieces: catMap.get(cat)!.reduce((s, i) => s + i.total_pieces, 0),
+        items: catMap.get(cat)!,
+      }));
+
+    // CATEGORY_ORDER에 없는 카테고리 추가
+    for (const [cat, catItems] of catMap.entries()) {
+      if (!CATEGORY_ORDER.includes(cat)) {
+        groups.push({ category: cat, total_pieces: catItems.reduce((s, i) => s + i.total_pieces, 0), items: catItems });
+      }
+    }
+
+    setCategoryGroups(groups);
+
+    // 매장별 집계
     const storeMap = new Map<string, Map<string, { set_qty: number; ppu: number }>>();
     for (const item of data || []) {
       const order = item.orders as any;
@@ -131,19 +170,19 @@ export default function ProductionPage() {
   const totalSets = items.reduce((s, i) => s + i.set_qty, 0);
 
   if (loading) return (
-    <div className="min-h-screen bg-white flex items-center justify-center">
-      <p className="text-stone-500 text-sm">로딩 중...</p>
+    <div className="min-h-screen bg-stone-50 flex items-center justify-center">
+      <p className="text-stone-400 text-sm">불러오는 중...</p>
     </div>
   );
 
   return (
-    <div className="min-h-screen bg-stone-50">
+    <div className="min-h-screen bg-stone-50 pb-20">
       {/* 헤더 */}
       <div className="no-print sticky top-0 z-10 bg-white border-b border-stone-200 px-4 py-3">
         <div className="flex items-center justify-between mb-2">
           <div>
-            <h1 className="text-stone-900 font-bold text-lg">생산 현황</h1>
-            <p className="text-stone-500 text-xs">{todayLabel} — 총 {totalPieces.toLocaleString()}개 생산</p>
+            <h1 className="text-stone-900 font-bold text-base">생산 현황</h1>
+            <p className="text-stone-400 text-xs">{todayLabel} — 총 {totalPieces.toLocaleString()}개 생산</p>
           </div>
           <button onClick={load} className="text-emerald-700 text-sm font-medium">갱신</button>
         </div>
@@ -157,55 +196,46 @@ export default function ProductionPage() {
         </div>
       </div>
 
-      {/* 전체 총량 */}
+      {/* 전체 총량 — 카테고리별 */}
       {tab === "total" && (
-        <div className="px-4 py-4">
-          <div className="grid grid-cols-2 gap-3 mb-4">
+        <div className="px-4 py-4 space-y-3">
+          {/* 요약 */}
+          <div className="grid grid-cols-2 gap-3">
             <div className="bg-white border border-stone-200 rounded-xl p-3 text-center">
               <p className="text-2xl font-bold text-emerald-700">{totalPieces.toLocaleString()}</p>
-              <p className="text-stone-500 text-xs mt-1">총 생산 개수</p>
+              <p className="text-stone-400 text-xs mt-1">총 생산량</p>
             </div>
             <div className="bg-white border border-stone-200 rounded-xl p-3 text-center">
               <p className="text-2xl font-bold text-stone-700">{totalSets.toLocaleString()}</p>
-              <p className="text-stone-500 text-xs mt-1">총 세트 수</p>
+              <p className="text-stone-400 text-xs mt-1">총 세트 수</p>
             </div>
           </div>
 
-          {items.length === 0 ? (
-            <div className="text-center text-stone-400 py-16">오늘 주문이 없습니다</div>
+          {categoryGroups.length === 0 ? (
+            <div className="text-center text-stone-400 py-16 text-sm">오늘 주문이 없습니다</div>
           ) : (
-            <div className="bg-white border border-stone-200 rounded-xl overflow-hidden">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-stone-100 bg-stone-50">
-                    <th className="text-left text-stone-500 px-4 py-2.5 font-medium">품목</th>
-                    <th className="text-right text-stone-500 px-3 py-2.5 font-medium">세트</th>
-                    <th className="text-right text-stone-500 px-4 py-2.5 font-medium">생산량</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {items.map((item, i) => (
-                    <tr key={item.product_name} className={i < items.length - 1 ? "border-b border-stone-100" : ""}>
-                      <td className="px-4 py-3">
-                        <p className="text-stone-900 font-medium">{item.product_name}</p>
-                        <p className="text-stone-400 text-xs">
-                          {item.sources.map(s => `${SOURCE_LABELS[s.source] || s.source} ${s.qty}`).join(" · ")}
-                        </p>
-                      </td>
-                      <td className="text-right text-stone-500 px-3 py-3 text-sm">{item.set_qty}세트</td>
-                      <td className="text-right px-4 py-3">
-                        <span className="text-emerald-700 font-bold text-base">{item.total_pieces.toLocaleString()}개</span>
-                      </td>
-                    </tr>
-                  ))}
-                  <tr className="border-t-2 border-stone-200 bg-stone-50">
-                    <td className="px-4 py-3 text-stone-700 font-bold">합계</td>
-                    <td className="text-right px-3 py-3 text-stone-500 text-sm">{totalSets}세트</td>
-                    <td className="text-right px-4 py-3 text-emerald-700 font-bold text-base">{totalPieces.toLocaleString()}개</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+            categoryGroups.map((group) => (
+              <div key={group.category} className="bg-white border border-stone-200 rounded-xl overflow-hidden">
+                {/* 카테고리 헤더 — 총량 강조 */}
+                <div className="px-4 py-3 bg-stone-50 border-b border-stone-100 flex items-center justify-between">
+                  <span className="text-stone-700 font-bold text-sm">{group.category}</span>
+                  <span className="text-emerald-700 font-bold text-lg">{group.total_pieces.toLocaleString()}개</span>
+                </div>
+                {/* 품목 상세 */}
+                {group.items.map((item, i) => (
+                  <div key={item.product_name} className={`px-4 py-2.5 flex items-center justify-between ${i < group.items.length - 1 ? "border-b border-stone-100" : ""}`}>
+                    <div>
+                      <p className="text-stone-800 text-sm">{item.product_name}</p>
+                      <p className="text-stone-400 text-xs">
+                        {item.set_qty}세트 × {item.pieces_per_unit}개
+                        {item.sources.length > 0 && ` · ${item.sources.map(s => SOURCE_LABELS[s.source] || s.source).join("·")}`}
+                      </p>
+                    </div>
+                    <span className="text-stone-900 font-semibold text-sm">{item.total_pieces}개</span>
+                  </div>
+                ))}
+              </div>
+            ))
           )}
         </div>
       )}
@@ -214,31 +244,22 @@ export default function ProductionPage() {
       {tab === "store" && (
         <div className="px-4 py-4 space-y-4">
           {storeItems.length === 0 ? (
-            <div className="text-center text-stone-400 py-16">매장 발주가 없습니다</div>
+            <div className="text-center text-stone-400 py-16 text-sm">매장 발주가 없습니다</div>
           ) : storeItems.map((store) => (
             <div key={store.store_name} className="bg-white border border-stone-200 rounded-xl overflow-hidden">
               <div className="px-4 py-3 bg-stone-50 border-b border-stone-100 flex justify-between items-center">
-                <span className="text-stone-900 font-bold">{store.store_name}</span>
+                <span className="text-stone-900 font-bold text-sm">{store.store_name}</span>
                 <span className="text-emerald-700 font-bold">총 {store.total_pieces.toLocaleString()}개</span>
               </div>
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-stone-100">
-                    <th className="text-left text-stone-400 px-4 py-2 font-medium">품목</th>
-                    <th className="text-right text-stone-400 px-3 py-2 font-medium">세트</th>
-                    <th className="text-right text-stone-400 px-4 py-2 font-medium">생산량</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {store.items.map((item, i) => (
-                    <tr key={item.product_name} className={i < store.items.length - 1 ? "border-b border-stone-100" : ""}>
-                      <td className="text-stone-800 px-4 py-2.5">{item.product_name}</td>
-                      <td className="text-right text-stone-400 px-3 py-2.5">{item.set_qty}세트</td>
-                      <td className="text-right text-stone-900 font-semibold px-4 py-2.5">{item.total_pieces}개</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+              {store.items.map((item, i) => (
+                <div key={item.product_name} className={`px-4 py-2.5 flex items-center justify-between text-sm ${i < store.items.length - 1 ? "border-b border-stone-100" : ""}`}>
+                  <div>
+                    <p className="text-stone-800">{item.product_name}</p>
+                    <p className="text-stone-400 text-xs">{item.set_qty}세트 × {item.pieces_per_unit}개</p>
+                  </div>
+                  <span className="text-stone-900 font-semibold">{item.total_pieces}개</span>
+                </div>
+              ))}
             </div>
           ))}
         </div>
@@ -256,18 +277,42 @@ export default function ProductionPage() {
             </button>
           </div>
 
-          <div className="bg-white border border-stone-200 rounded-xl p-6 print-content">
+          <div className="bg-white border border-stone-200 rounded-xl p-6">
             <div className="text-center mb-6">
               <h2 className="text-xl font-bold text-stone-900">생산 작업 지시서</h2>
-              <p className="text-stone-500 text-sm mt-1">{todayLabel}</p>
+              <p className="text-stone-400 text-sm mt-1">{todayLabel}</p>
             </div>
 
-            <h3 className="text-sm font-bold text-stone-700 mb-2 pb-1 border-b border-stone-200">전체 품목별 생산량</h3>
+            {/* 카테고리별 생산량 */}
+            <h3 className="text-sm font-bold text-stone-700 mb-2 pb-1 border-b border-stone-200">카테고리별 총 생산량</h3>
+            <table className="w-full text-sm mb-6 border-collapse">
+              <thead>
+                <tr className="bg-stone-100">
+                  <th className="text-left border border-stone-300 px-3 py-2 font-semibold text-stone-700">분류</th>
+                  <th className="text-center border border-stone-300 px-3 py-2 font-semibold text-stone-700">생산량</th>
+                </tr>
+              </thead>
+              <tbody>
+                {categoryGroups.map((group) => (
+                  <tr key={group.category}>
+                    <td className="border border-stone-300 px-3 py-2 text-stone-800 font-medium">{group.category}</td>
+                    <td className="border border-stone-300 px-3 py-2 text-center font-bold text-stone-900">{group.total_pieces}개</td>
+                  </tr>
+                ))}
+                <tr className="bg-stone-50 font-bold">
+                  <td className="border border-stone-300 px-3 py-2 text-stone-800">합계</td>
+                  <td className="border border-stone-300 px-3 py-2 text-center text-stone-900">{totalPieces.toLocaleString()}개</td>
+                </tr>
+              </tbody>
+            </table>
+
+            {/* 품목별 상세 */}
+            <h3 className="text-sm font-bold text-stone-700 mb-2 pb-1 border-b border-stone-200">품목별 상세 생산량</h3>
             <table className="w-full text-sm mb-6 border-collapse">
               <thead>
                 <tr className="bg-stone-100">
                   <th className="text-left border border-stone-300 px-3 py-2 font-semibold text-stone-700">품목명</th>
-                  <th className="text-center border border-stone-300 px-3 py-2 font-semibold text-stone-700">세트 수</th>
+                  <th className="text-center border border-stone-300 px-3 py-2 font-semibold text-stone-700">세트</th>
                   <th className="text-center border border-stone-300 px-3 py-2 font-semibold text-stone-700">개/세트</th>
                   <th className="text-center border border-stone-300 px-3 py-2 font-semibold text-stone-700">생산량</th>
                 </tr>
@@ -320,14 +365,14 @@ export default function ProductionPage() {
             )}
 
             <div className="mt-6 pt-4 border-t border-stone-200 text-xs text-stone-400 text-right">
-              출력 시각: {new Date().toLocaleString("ko-KR")}
+              출력: {new Date().toLocaleString("ko-KR")}
             </div>
           </div>
         </div>
       )}
 
       {lastUpdated && (
-        <p className="no-print text-center text-stone-400 text-xs py-4">
+        <p className="no-print text-center text-stone-300 text-xs py-4">
           {lastUpdated.toLocaleTimeString("ko-KR")} 기준 · 30초 자동갱신
         </p>
       )}
