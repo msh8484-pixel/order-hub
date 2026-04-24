@@ -21,7 +21,7 @@ type CategoryGroup = {
 
 type StoreItem = {
   store_name: string;
-  items: { product_name: string; set_qty: number; pieces_per_unit: number; total_pieces: number }[];
+  items: { product_name: string; category: string; set_qty: number; pieces_per_unit: number; total_pieces: number }[];
   total_pieces: number;
 };
 
@@ -133,16 +133,18 @@ export default function ProductionPage() {
       const storeName = order.stores?.name || "알 수 없음";
       const name = item.product_name;
       const ppu = (item.products as any)?.pieces_per_unit ?? 1;
+      const category = (item.products as any)?.category ?? "기타";
       if (!storeMap.has(storeName)) storeMap.set(storeName, new Map());
       const m = storeMap.get(storeName)!;
-      const prev = m.get(name) || { set_qty: 0, ppu };
-      m.set(name, { set_qty: prev.set_qty + item.quantity, ppu });
+      const prev = m.get(name) || { set_qty: 0, ppu, category };
+      m.set(name, { set_qty: prev.set_qty + item.quantity, ppu, category });
     }
 
     const storeResult: StoreItem[] = Array.from(storeMap.entries()).map(([store_name, itemMap]) => {
       const storeItemsList = Array.from(itemMap.entries())
-        .map(([product_name, { set_qty, ppu }]) => ({
+        .map(([product_name, { set_qty, ppu, category }]) => ({
           product_name,
+          category,
           set_qty,
           pieces_per_unit: ppu,
           total_pieces: set_qty * ppu,
@@ -216,22 +218,23 @@ export default function ProductionPage() {
           ) : (
             categoryGroups.map((group) => (
               <div key={group.category} className="bg-white border border-stone-200 rounded-xl overflow-hidden">
-                {/* 카테고리 헤더 — 총량 강조 */}
-                <div className="px-4 py-3 bg-stone-50 border-b border-stone-100 flex items-center justify-between">
-                  <span className="text-stone-700 font-bold text-sm">{group.category}</span>
-                  <span className="text-emerald-700 font-bold text-lg">{group.total_pieces.toLocaleString()}개</span>
+                {/* 카테고리 헤더 */}
+                <div className="px-4 py-2.5 bg-stone-800 flex items-center justify-between">
+                  <span className="text-white font-bold text-sm">{group.category}</span>
+                  <span className="text-emerald-300 font-bold text-base">{group.total_pieces.toLocaleString()}개</span>
                 </div>
-                {/* 품목 상세 */}
-                {group.items.map((item, i) => (
-                  <div key={item.product_name} className={`px-4 py-2.5 flex items-center justify-between ${i < group.items.length - 1 ? "border-b border-stone-100" : ""}`}>
-                    <div>
-                      <p className="text-stone-800 text-sm">{item.product_name}</p>
-                      <p className="text-stone-400 text-xs">
-                        {item.set_qty}세트 × {item.pieces_per_unit}개
-                        {item.sources.length > 0 && ` · ${item.sources.map(s => SOURCE_LABELS[s.source] || s.source).join("·")}`}
-                      </p>
-                    </div>
-                    <span className="text-stone-900 font-semibold text-sm">{item.total_pieces}개</span>
+                {/* 컬럼 헤더 */}
+                <div className="flex items-center gap-2 px-4 py-1.5 bg-stone-50 border-b border-stone-100">
+                  <span className="flex-1 text-stone-400 text-xs">품목</span>
+                  <span className="text-stone-400 text-xs w-16 text-right">세트</span>
+                  <span className="text-stone-400 text-xs w-14 text-right">생산량</span>
+                </div>
+                {/* 품목 행 */}
+                {group.items.map((item) => (
+                  <div key={item.product_name} className="flex items-center gap-2 px-4 py-2.5 border-b border-stone-50 last:border-0">
+                    <span className="flex-1 text-stone-800 text-sm">{item.product_name}</span>
+                    <span className="text-stone-500 text-xs w-16 text-right">{item.set_qty}세트</span>
+                    <span className="text-stone-900 font-bold text-sm w-14 text-right">{item.total_pieces.toLocaleString()}개</span>
                   </div>
                 ))}
               </div>
@@ -245,23 +248,52 @@ export default function ProductionPage() {
         <div className="px-4 py-4 space-y-4">
           {storeItems.length === 0 ? (
             <div className="text-center text-stone-400 py-16 text-sm">매장 발주가 없습니다</div>
-          ) : storeItems.map((store) => (
-            <div key={store.store_name} className="bg-white border border-stone-200 rounded-xl overflow-hidden">
-              <div className="px-4 py-3 bg-stone-50 border-b border-stone-100 flex justify-between items-center">
-                <span className="text-stone-900 font-bold text-sm">{store.store_name}</span>
-                <span className="text-emerald-700 font-bold">총 {store.total_pieces.toLocaleString()}개</span>
-              </div>
-              {store.items.map((item, i) => (
-                <div key={item.product_name} className={`px-4 py-2.5 flex items-center justify-between text-sm ${i < store.items.length - 1 ? "border-b border-stone-100" : ""}`}>
-                  <div>
-                    <p className="text-stone-800">{item.product_name}</p>
-                    <p className="text-stone-400 text-xs">{item.set_qty}세트 × {item.pieces_per_unit}개</p>
-                  </div>
-                  <span className="text-stone-900 font-semibold">{item.total_pieces}개</span>
+          ) : storeItems.map((store) => {
+            // 카테고리별 그룹화
+            const storeCatMap = new Map<string, typeof store.items>();
+            for (const item of store.items) {
+              const c = item.category || "기타";
+              if (!storeCatMap.has(c)) storeCatMap.set(c, []);
+              storeCatMap.get(c)!.push(item);
+            }
+            const storeCats = CATEGORY_ORDER.filter(c => storeCatMap.has(c))
+              .concat([...storeCatMap.keys()].filter(c => !CATEGORY_ORDER.includes(c)));
+            return (
+              <div key={store.store_name} className="bg-white border border-stone-200 rounded-xl overflow-hidden">
+                {/* 매장 헤더 */}
+                <div className="px-4 py-2.5 bg-stone-800 flex justify-between items-center">
+                  <span className="text-white font-bold text-sm">{store.store_name}</span>
+                  <span className="text-emerald-300 font-bold text-base">총 {store.total_pieces.toLocaleString()}개</span>
                 </div>
-              ))}
-            </div>
-          ))}
+                {storeCats.map((cat, ci) => (
+                  <div key={cat}>
+                    {/* 카테고리 구분행 */}
+                    <div className={`flex items-center px-4 py-1.5 bg-stone-50 ${ci > 0 ? "border-t border-stone-200" : ""} border-b border-stone-100`}>
+                      <span className="text-stone-500 text-xs font-semibold tracking-wider">{cat}</span>
+                      <span className="ml-auto text-stone-400 text-xs">
+                        {storeCatMap.get(cat)!.reduce((s, i) => s + i.total_pieces, 0).toLocaleString()}개
+                      </span>
+                    </div>
+                    {/* 컬럼 헤더 — 첫 카테고리에만 */}
+                    {ci === 0 && (
+                      <div className="flex items-center gap-2 px-4 py-1 border-b border-stone-50">
+                        <span className="flex-1 text-stone-300 text-xs">품목</span>
+                        <span className="text-stone-300 text-xs w-16 text-right">세트</span>
+                        <span className="text-stone-300 text-xs w-14 text-right">생산량</span>
+                      </div>
+                    )}
+                    {storeCatMap.get(cat)!.map((item) => (
+                      <div key={item.product_name} className="flex items-center gap-2 px-4 py-2.5 border-b border-stone-50 last:border-0">
+                        <span className="flex-1 text-stone-800 text-sm">{item.product_name}</span>
+                        <span className="text-stone-500 text-xs w-16 text-right">{item.set_qty}세트</span>
+                        <span className="text-stone-900 font-bold text-sm w-14 text-right">{item.total_pieces.toLocaleString()}개</span>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            );
+          })}
         </div>
       )}
 

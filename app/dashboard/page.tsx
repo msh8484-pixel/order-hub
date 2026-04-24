@@ -308,7 +308,7 @@ export default function DashboardPage() {
                   </span>
                 </div>
 
-                <div className="mb-3 space-y-2">
+                <div className="mb-3 border border-stone-100 rounded-lg overflow-hidden">
                   {(() => {
                     const catMap = new Map<string, OrderItem[]>();
                     for (const it of order.items) {
@@ -316,26 +316,30 @@ export default function DashboardPage() {
                       if (!catMap.has(c)) catMap.set(c, []);
                       catMap.get(c)!.push(it);
                     }
-                    return CATEGORY_ORDER
+                    const cats = CATEGORY_ORDER
                       .filter(c => catMap.has(c))
-                      .concat([...catMap.keys()].filter(c => !CATEGORY_ORDER.includes(c)))
-                      .map(cat => (
-                        <div key={cat}>
-                          <p className="text-stone-400 text-xs font-semibold mb-1">{cat}</p>
-                          {catMap.get(cat)!.map((item, i) => {
-                            const pieces = item.quantity * item.pieces_per_unit;
-                            return (
-                              <div key={i} className="flex justify-between text-sm py-0.5">
-                                <span className="text-stone-600">{item.product_name}</span>
-                                <span className="text-stone-500">
-                                  <span className="text-stone-400">{item.quantity}세트 · </span>
-                                  <span className="text-stone-900 font-semibold">{pieces.toLocaleString()}개</span>
-                                </span>
-                              </div>
-                            );
-                          })}
+                      .concat([...catMap.keys()].filter(c => !CATEGORY_ORDER.includes(c)));
+                    return cats.map((cat, ci) => (
+                      <div key={cat}>
+                        {/* 카테고리 구분행 */}
+                        <div className={`flex items-center px-3 py-1.5 bg-stone-50 ${ci > 0 ? "border-t border-stone-100" : ""}`}>
+                          <span className="text-stone-500 text-xs font-semibold tracking-wider">{cat}</span>
+                          <span className="ml-auto text-stone-400 text-xs">
+                            {catMap.get(cat)!.reduce((s, i) => s + i.quantity * i.pieces_per_unit, 0).toLocaleString()}개
+                          </span>
                         </div>
-                      ));
+                        {catMap.get(cat)!.map((item) => {
+                          const pieces = item.quantity * item.pieces_per_unit;
+                          return (
+                            <div key={item.product_name} className="flex items-center gap-2 px-3 py-2 border-t border-stone-50">
+                              <span className="flex-1 text-stone-700 text-sm">{item.product_name}</span>
+                              <span className="text-stone-400 text-xs w-14 text-right">{item.quantity}세트</span>
+                              <span className="text-stone-900 font-semibold text-sm w-14 text-right">{pieces.toLocaleString()}개</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    ));
                   })()}
                 </div>
 
