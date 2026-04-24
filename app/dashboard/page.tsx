@@ -2,6 +2,10 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/lib/supabase";
+import {
+  BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer,
+  PieChart, Pie, Cell, Legend,
+} from "recharts";
 
 type OrderItem = {
   product_name: string;
@@ -24,6 +28,10 @@ type CategoryTotal = {
   total_pieces: number;
 };
 
+type MonthlyData = { month: string; label: string; pieces: number };
+type CategoryStat = { category: string; pieces: number };
+type StoreStat = { store: string; pieces: number };
+
 const STATUS_LABEL: Record<string, string> = {
   pending: "접수",
   confirmed: "확인됨",
@@ -42,6 +50,7 @@ const STATUS_STYLE: Record<string, string> = {
 
 const DAY_KO = ["일", "월", "화", "수", "목", "금", "토"];
 const CATEGORY_ORDER = ["쑥인절미", "약밥", "무설탕", "개떡", "찹쌀떡", "찰떡", "설기", "현미", "음료", "답례떡", "기타"];
+const PIE_COLORS = ["#059669", "#10b981", "#34d399", "#6ee7b7", "#a7f3d0", "#d1fae5", "#047857", "#065f46", "#064e3b", "#022c22", "#6b7280"];
 
 function buildStrip(centerDate: string, count = 15) {
   const center = new Date(centerDate);
@@ -70,6 +79,9 @@ function buildCalendar(year: number, month: number) {
 }
 
 export default function DashboardPage() {
+  const [mainTab, setMainTab] = useState<"orders" | "stats">("orders");
+
+  // --- 발주 현황 state ---
   const [orders, setOrders] = useState<StoreOrder[]>([]);
   const [categoryTotals, setCategoryTotals] = useState<CategoryTotal[]>([]);
   const [loading, setLoading] = useState(true);
@@ -85,6 +97,18 @@ export default function DashboardPage() {
 
   const stripDays = buildStrip(selectedDate, 15);
   const calWeeks = buildCalendar(calYear, calMonth);
+
+  // --- 통계 state ---
+  const [statsLoading, setStatsLoading] = useState(false);
+  const [monthlyData, setMonthlyData] = useState<MonthlyData[]>([]);
+  const [categoryStats, setCategoryStats] = useState<CategoryStat[]>([]);
+  const [storeStats, setStoreStats] = useState<StoreStat[]>([]);
+  const [thisMonthPieces, setThisMonthPieces] = useState(0);
+  const [lastMonthPieces, setLastMonthPieces] = useState(0);
+  const [thisMonthOrders, setThisMonthOrders] = useState(0);
+  const [aiSummary, setAiSummary] = useState("");
+  const [aiLoading, setAiLoading] = useState(false);
+  const [statsLoaded, setStatsLoaded] = useState(false);
 
   useEffect(() => {
     const el = stripRef.current;
@@ -105,7 +129,6 @@ export default function DashboardPage() {
   }
 
   const load = useCallback(async () => {
-    // 발주 목록
     const { data: orderData, error } = await supabase
       .from("orders")
       .select(`id, status, created_at, store_id, stores(name), order_items(product_name, quantity, products(pieces_per_unit, category))`)
@@ -130,7 +153,6 @@ export default function DashboardPage() {
       })),
     })));
 
-    // 카테고리별 생산량
     const { data: itemData } = await supabase
       .from("order_items")
       .select(`quantity, orders!inner(order_date, status), products(pieces_per_unit, category)`)
@@ -163,6 +185,101 @@ export default function DashboardPage() {
     return () => clearInterval(interval);
   }, [load]);
 
+  const loadStats = useCallback(async () => {
+    setStatsLoading(true);
+    const now = new Date();
+    const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 5, 1).toISOString().slice(0, 10);
+    const thisMonthStart = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`;
+    const lastMonthD = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const lastMonthStart = lastMonthD.toISOString().slice(0, 10);
+    const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0).toISOString().slice(0, 10);
+
+    const { data } = await supabase
+      .from("order_items")
+      .select("quantity, orders!inner(order_date, status, source, store_id, stores(name)), products(pieces_per_unit, category)")
+      .gte("orders.order_date", sixMonthsAgo)
+      .neq("orders.status", "cancelled");
+
+    if (!data) { setStatsLoading(false); return; }
+
+    const monthMap = new Map<string, number>();
+    const catMap = new Map<string, number>();
+    const storeMap = new Map<string, number>();
+    const orderSet = new Set<string>();
+    let thisMo = 0;
+    let lastMo = 0;
+
+    for (const item of data) {
+      const order = item.orders as any;
+      const ppu = (item.products as any)?.pieces_per_unit ?? 1;
+      const cat = (item.products as any)?.category ?? "기타";
+      const pieces = item.quantity * ppu;
+      const date = order.order_date as string;
+      const monthKey = date.slice(0, 7);
+
+      monthMap.set(monthKey, (monthMap.get(monthKey) || 0) + pieces);
+
+      if (date >= thisMonthStart) {
+        catMap.set(cat, (catMap.get(cat) || 0) + pieces);
+        thisMo += pieces;
+        orderSet.add(order.id || date + cat);
+        if (order.source === "store" && order.stores?.name) {
+          storeMap.set(order.stores.name, (storeMap.get(order.stores.name) || 0) + pieces);
+        }
+      }
+      if (date >= lastMonthStart && date <= lastMonthEnd) {
+        lastMo += pieces;
+      }
+    }
+
+    const monthly: MonthlyData[] = [];
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+      monthly.push({ month: key, label: `${d.getMonth() + 1}월`, pieces: monthMap.get(key) || 0 });
+    }
+
+    const categories: CategoryStat[] = CATEGORY_ORDER
+      .filter(c => catMap.has(c))
+      .map(c => ({ category: c, pieces: catMap.get(c)! }))
+      .concat([...catMap.keys()].filter(c => !CATEGORY_ORDER.includes(c)).map(c => ({ category: c, pieces: catMap.get(c)! })));
+
+    const stores: StoreStat[] = [...storeMap.entries()]
+      .map(([store, pieces]) => ({ store, pieces }))
+      .sort((a, b) => b.pieces - a.pieces)
+      .slice(0, 6);
+
+    setMonthlyData(monthly);
+    setCategoryStats(categories);
+    setStoreStats(stores);
+    setThisMonthPieces(thisMo);
+    setLastMonthPieces(lastMo);
+    setThisMonthOrders(orderSet.size);
+    setStatsLoading(false);
+    setStatsLoaded(true);
+  }, []);
+
+  useEffect(() => {
+    if (mainTab === "stats" && !statsLoaded) loadStats();
+  }, [mainTab, statsLoaded, loadStats]);
+
+  async function getAiSummary() {
+    setAiLoading(true);
+    setAiSummary("");
+    try {
+      const res = await fetch("/api/stats/summary", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ thisMonth: thisMonthPieces, lastMonth: lastMonthPieces, monthly: monthlyData, categories: categoryStats, stores: storeStats }),
+      });
+      const json = await res.json();
+      setAiSummary(json.summary || json.error || "요약 실패");
+    } catch {
+      setAiSummary("요약 요청에 실패했습니다.");
+    }
+    setAiLoading(false);
+  }
+
   async function updateStatus(orderId: string, status: string) {
     await supabase.from("orders").update({ status }).eq("id", orderId);
     load();
@@ -176,199 +293,361 @@ export default function DashboardPage() {
     year: "numeric", month: "long", day: "numeric", weekday: "short",
   });
 
+  const now = new Date();
+  const thisMonthLabel = `${now.getFullYear()}년 ${now.getMonth() + 1}월`;
+  const pieceDiff = thisMonthPieces - lastMonthPieces;
+  const pieceDiffPct = lastMonthPieces > 0 ? Math.round((pieceDiff / lastMonthPieces) * 100) : 0;
+
   return (
     <div className="min-h-screen bg-stone-50 pb-20">
-      {/* 헤더 + 날짜 선택 */}
+      {/* 헤더 */}
       <div className="sticky top-0 z-20 bg-white border-b border-stone-200">
         <div className="px-4 pt-3 pb-2 flex items-center justify-between">
           <div>
             <h1 className="text-stone-900 font-bold text-base">사장님 대시보드</h1>
-            <button
-              onClick={() => { setCalYear(selD.getFullYear()); setCalMonth(selD.getMonth()); setShowCalendar(!showCalendar); }}
-              className="text-stone-500 text-xs mt-0.5 flex items-center gap-1"
-            >
-              {selectedLabel}
-              <span className="text-stone-400">{showCalendar ? "▲" : "▼"}</span>
-            </button>
-          </div>
-          <button onClick={load} className="text-emerald-700 text-sm font-medium">새로고침</button>
-        </div>
-
-        {/* 날짜 스트립 */}
-        <div ref={stripRef} className="flex gap-1 overflow-x-auto px-3 pb-3" style={{ scrollbarWidth: "none" }}>
-          {stripDays.map(({ dateStr, day, weekday, isToday, dow }) => {
-            const isSel = dateStr === selectedDate;
-            return (
+            {mainTab === "orders" && (
               <button
-                key={dateStr}
-                data-selected={isSel}
-                onClick={() => selectDate(dateStr)}
-                className={`flex-shrink-0 flex flex-col items-center px-2.5 py-2 rounded-xl transition-colors min-w-[44px] ${
-                  isSel ? "bg-emerald-700" : isToday ? "bg-emerald-50 border border-emerald-200" : "hover:bg-stone-50"
-                }`}
+                onClick={() => { setCalYear(selD.getFullYear()); setCalMonth(selD.getMonth()); setShowCalendar(!showCalendar); }}
+                className="text-stone-500 text-xs mt-0.5 flex items-center gap-1"
               >
-                <span className={`text-[10px] font-medium mb-1 ${isSel ? "text-emerald-200" : dow === 0 ? "text-red-400" : dow === 6 ? "text-blue-400" : "text-stone-400"}`}>{weekday}</span>
-                <span className={`text-sm font-bold ${isSel ? "text-white" : isToday ? "text-emerald-700" : dow === 0 ? "text-red-500" : dow === 6 ? "text-blue-500" : "text-stone-800"}`}>{day}</span>
+                {selectedLabel}
+                <span className="text-stone-400">{showCalendar ? "▲" : "▼"}</span>
               </button>
-            );
-          })}
+            )}
+            {mainTab === "stats" && (
+              <p className="text-stone-400 text-xs mt-0.5">{thisMonthLabel} 기준</p>
+            )}
+          </div>
+          <button
+            onClick={() => mainTab === "orders" ? load() : loadStats()}
+            className="text-emerald-700 text-sm font-medium"
+          >
+            새로고침
+          </button>
         </div>
 
-        {/* 월간 달력 */}
-        {showCalendar && (
-          <div className="border-t border-stone-100 bg-white px-4 pt-3 pb-4">
-            <div className="flex items-center justify-between mb-3">
-              <button onClick={() => moveCalMonth(-1)} className="text-stone-400 px-2 py-1 rounded-lg hover:bg-stone-100 text-sm">‹</button>
-              <span className="text-stone-900 font-semibold text-sm">{calYear}년 {calMonth + 1}월</span>
-              <button onClick={() => moveCalMonth(1)} className="text-stone-400 px-2 py-1 rounded-lg hover:bg-stone-100 text-sm">›</button>
-            </div>
-            <div className="grid grid-cols-7 mb-1">
-              {DAY_KO.map((d, i) => (
-                <div key={d} className={`text-center text-xs font-medium py-1 ${i === 0 ? "text-red-400" : i === 6 ? "text-blue-400" : "text-stone-400"}`}>{d}</div>
-              ))}
-            </div>
-            {calWeeks.map((week, wi) => (
-              <div key={wi} className="grid grid-cols-7">
-                {week.map((d, di) => {
-                  if (!d) return <div key={di} />;
-                  const dateStr = `${calYear}-${String(calMonth + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
-                  const isSel = dateStr === selectedDate;
-                  const isToday2 = dateStr === today;
-                  return (
-                    <button key={di} onClick={() => selectDate(dateStr)}
-                      className={`mx-0.5 my-0.5 h-8 rounded-lg text-sm font-medium transition-colors ${
-                        isSel ? "bg-emerald-700 text-white" :
-                        isToday2 ? "bg-emerald-50 text-emerald-700 border border-emerald-200" :
-                        di === 0 ? "text-red-500 hover:bg-stone-100" :
-                        di === 6 ? "text-blue-500 hover:bg-stone-100" :
-                        "text-stone-700 hover:bg-stone-100"
-                      }`}>
-                      {d}
-                    </button>
-                  );
-                })}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div className="px-4 pt-4 space-y-4">
-        {/* 요약 카드 */}
-        <div className="grid grid-cols-3 gap-3">
-          <div className="bg-white rounded-xl p-3 text-center border border-stone-200">
-            <p className="text-2xl font-bold text-stone-900">{orders.length}</p>
-            <p className="text-stone-400 text-xs mt-1">발주 건수</p>
-          </div>
-          <div className="bg-white rounded-xl p-3 text-center border border-stone-200">
-            <p className="text-2xl font-bold text-emerald-700">{storeCount}</p>
-            <p className="text-stone-400 text-xs mt-1">참여 매장</p>
-          </div>
-          <div className="bg-white rounded-xl p-3 text-center border border-stone-200">
-            <p className="text-2xl font-bold text-stone-900">{totalItems.toLocaleString()}</p>
-            <p className="text-stone-400 text-xs mt-1">총 세트</p>
-          </div>
+        {/* 메인 탭 */}
+        <div className="flex gap-1 mx-4 mb-2 bg-stone-100 rounded-lg p-1">
+          {([["orders", "발주 현황"], ["stats", "통계 분석"]] as ["orders" | "stats", string][]).map(([key, label]) => (
+            <button
+              key={key}
+              onClick={() => setMainTab(key)}
+              className={`flex-1 text-xs py-1.5 rounded-md font-medium transition-colors ${mainTab === key ? "bg-white text-emerald-700 shadow-sm" : "text-stone-500"}`}
+            >
+              {label}
+            </button>
+          ))}
         </div>
 
-        {/* 카테고리별 생산량 */}
-        {!loading && categoryTotals.length > 0 && (
-          <div className="bg-white rounded-xl border border-stone-200 overflow-hidden">
-            <div className="px-4 py-3 border-b border-stone-100 flex items-center justify-between">
-              <span className="text-stone-700 font-bold text-sm">생산량 요약</span>
-              <span className="text-emerald-700 font-bold text-sm">총 {totalPieces.toLocaleString()}개</span>
+        {/* 날짜 스트립 — 발주 현황 탭만 */}
+        {mainTab === "orders" && (
+          <>
+            <div ref={stripRef} className="flex gap-1 overflow-x-auto px-3 pb-3" style={{ scrollbarWidth: "none" }}>
+              {stripDays.map(({ dateStr, day, weekday, isToday, dow }) => {
+                const isSel = dateStr === selectedDate;
+                return (
+                  <button
+                    key={dateStr}
+                    data-selected={isSel}
+                    onClick={() => selectDate(dateStr)}
+                    className={`flex-shrink-0 flex flex-col items-center px-2.5 py-2 rounded-xl transition-colors min-w-[44px] ${
+                      isSel ? "bg-emerald-700" : isToday ? "bg-emerald-50 border border-emerald-200" : "hover:bg-stone-50"
+                    }`}
+                  >
+                    <span className={`text-[10px] font-medium mb-1 ${isSel ? "text-emerald-200" : dow === 0 ? "text-red-400" : dow === 6 ? "text-blue-400" : "text-stone-400"}`}>{weekday}</span>
+                    <span className={`text-sm font-bold ${isSel ? "text-white" : isToday ? "text-emerald-700" : dow === 0 ? "text-red-500" : dow === 6 ? "text-blue-500" : "text-stone-800"}`}>{day}</span>
+                  </button>
+                );
+              })}
             </div>
-            {categoryTotals.map((ct, i) => (
-              <div key={ct.category} className={`px-4 py-3 flex items-center justify-between ${i < categoryTotals.length - 1 ? "border-b border-stone-100" : ""}`}>
-                <span className="text-stone-700 text-sm font-medium">{ct.category}</span>
-                <span className="text-stone-900 font-bold">{ct.total_pieces.toLocaleString()}개</span>
-              </div>
-            ))}
-          </div>
-        )}
 
-        {/* 매장별 발주 목록 */}
-        <div className="space-y-3">
-          <h2 className="text-stone-500 text-xs font-semibold tracking-wider">매장 발주 내역</h2>
-          {loading ? (
-            <div className="text-center text-stone-400 py-10 text-sm">불러오는 중...</div>
-          ) : orders.length === 0 ? (
-            <div className="text-center text-stone-400 py-10 text-sm">이날 매장 발주가 없습니다</div>
-          ) : (
-            orders.map((order) => (
-              <div key={order.order_id} className="bg-white rounded-xl border border-stone-200 p-4">
+            {showCalendar && (
+              <div className="border-t border-stone-100 bg-white px-4 pt-3 pb-4">
                 <div className="flex items-center justify-between mb-3">
-                  <div>
-                    <span className="text-stone-900 font-bold text-sm">{order.store_name}</span>
-                    <span className="text-stone-400 text-xs ml-2">
-                      {new Date(order.submitted_at).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}
-                    </span>
-                  </div>
-                  <span className={`text-xs px-2 py-1 rounded-md font-medium ${STATUS_STYLE[order.status] || "bg-stone-100 text-stone-500"}`}>
-                    {STATUS_LABEL[order.status] || order.status}
-                  </span>
+                  <button onClick={() => moveCalMonth(-1)} className="text-stone-400 px-2 py-1 rounded-lg hover:bg-stone-100 text-sm">‹</button>
+                  <span className="text-stone-900 font-semibold text-sm">{calYear}년 {calMonth + 1}월</span>
+                  <button onClick={() => moveCalMonth(1)} className="text-stone-400 px-2 py-1 rounded-lg hover:bg-stone-100 text-sm">›</button>
                 </div>
-
-                <div className="mb-3 border border-stone-100 rounded-lg overflow-hidden">
-                  {(() => {
-                    const catMap = new Map<string, OrderItem[]>();
-                    for (const it of order.items) {
-                      const c = it.category || "기타";
-                      if (!catMap.has(c)) catMap.set(c, []);
-                      catMap.get(c)!.push(it);
-                    }
-                    const cats = CATEGORY_ORDER
-                      .filter(c => catMap.has(c))
-                      .concat([...catMap.keys()].filter(c => !CATEGORY_ORDER.includes(c)));
-                    return cats.map((cat, ci) => (
-                      <div key={cat}>
-                        {/* 카테고리 구분행 */}
-                        <div className={`flex items-center px-3 py-2 bg-stone-50 border-b border-stone-100 ${ci > 0 ? "border-t border-stone-200" : ""}`}>
-                          <span className="text-stone-600 text-xs font-bold tracking-wider">{cat}</span>
-                          <span className="ml-auto text-stone-500 text-xs font-semibold">
-                            {catMap.get(cat)!.reduce((s, i) => s + i.quantity * i.pieces_per_unit, 0).toLocaleString()}개
-                          </span>
-                        </div>
-                        {catMap.get(cat)!.map((item) => {
-                          const pieces = item.quantity * item.pieces_per_unit;
-                          return (
-                            <div key={item.product_name} className="flex items-center gap-3 px-3 py-2.5 border-b border-stone-50 last:border-0">
-                              <span className="flex-1 text-stone-700 text-sm leading-tight">{item.product_name}</span>
-                              <span className="bg-stone-100 border border-stone-200 rounded px-2 py-0.5 text-stone-600 text-xs font-medium flex-shrink-0">{item.quantity}세트</span>
-                              <span className="text-stone-900 font-semibold text-sm w-14 text-right flex-shrink-0">{pieces.toLocaleString()}개</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    ));
-                  })()}
-                </div>
-
-                <div className="flex gap-2 pt-3 border-t border-stone-100">
-                  {["confirmed", "producing", "done"].map((s) => (
-                    <button
-                      key={s}
-                      onClick={() => updateStatus(order.order_id, s)}
-                      disabled={order.status === s}
-                      className={`flex-1 text-xs py-2 rounded-lg transition-colors font-medium ${
-                        order.status === s
-                          ? "bg-emerald-700 text-white"
-                          : "bg-stone-100 text-stone-600 hover:bg-stone-200 border border-stone-200"
-                      }`}
-                    >
-                      {STATUS_LABEL[s]}
-                    </button>
+                <div className="grid grid-cols-7 mb-1">
+                  {DAY_KO.map((d, i) => (
+                    <div key={d} className={`text-center text-xs font-medium py-1 ${i === 0 ? "text-red-400" : i === 6 ? "text-blue-400" : "text-stone-400"}`}>{d}</div>
                   ))}
                 </div>
+                {calWeeks.map((week, wi) => (
+                  <div key={wi} className="grid grid-cols-7">
+                    {week.map((d, di) => {
+                      if (!d) return <div key={di} />;
+                      const dateStr = `${calYear}-${String(calMonth + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+                      const isSel = dateStr === selectedDate;
+                      const isToday2 = dateStr === today;
+                      return (
+                        <button key={di} onClick={() => selectDate(dateStr)}
+                          className={`mx-0.5 my-0.5 h-8 rounded-lg text-sm font-medium transition-colors ${
+                            isSel ? "bg-emerald-700 text-white" :
+                            isToday2 ? "bg-emerald-50 text-emerald-700 border border-emerald-200" :
+                            di === 0 ? "text-red-500 hover:bg-stone-100" :
+                            di === 6 ? "text-blue-500 hover:bg-stone-100" :
+                            "text-stone-700 hover:bg-stone-100"
+                          }`}>
+                          {d}
+                        </button>
+                      );
+                    })}
+                  </div>
+                ))}
               </div>
-            ))
-          )}
-        </div>
+            )}
+          </>
+        )}
       </div>
 
-      {lastUpdated && (
-        <p className="text-center text-stone-300 text-xs pt-6">
-          {lastUpdated.toLocaleTimeString("ko-KR")} 기준 · 30초 자동갱신
-        </p>
+      {/* ===================== 발주 현황 탭 ===================== */}
+      {mainTab === "orders" && (
+        <div className="px-4 pt-4 space-y-4">
+          <div className="grid grid-cols-3 gap-3">
+            <div className="bg-white rounded-xl p-3 text-center border border-stone-200">
+              <p className="text-2xl font-bold text-stone-900">{orders.length}</p>
+              <p className="text-stone-400 text-xs mt-1">발주 건수</p>
+            </div>
+            <div className="bg-white rounded-xl p-3 text-center border border-stone-200">
+              <p className="text-2xl font-bold text-emerald-700">{storeCount}</p>
+              <p className="text-stone-400 text-xs mt-1">참여 매장</p>
+            </div>
+            <div className="bg-white rounded-xl p-3 text-center border border-stone-200">
+              <p className="text-2xl font-bold text-stone-900">{totalItems.toLocaleString()}</p>
+              <p className="text-stone-400 text-xs mt-1">총 세트</p>
+            </div>
+          </div>
+
+          {!loading && categoryTotals.length > 0 && (
+            <div className="bg-white rounded-xl border border-stone-200 overflow-hidden">
+              <div className="px-4 py-3 border-b border-stone-100 flex items-center justify-between">
+                <span className="text-stone-700 font-bold text-sm">생산량 요약</span>
+                <span className="text-emerald-700 font-bold text-sm">총 {totalPieces.toLocaleString()}개</span>
+              </div>
+              {categoryTotals.map((ct, i) => (
+                <div key={ct.category} className={`px-4 py-3 flex items-center justify-between ${i < categoryTotals.length - 1 ? "border-b border-stone-100" : ""}`}>
+                  <span className="text-stone-700 text-sm font-medium">{ct.category}</span>
+                  <span className="text-stone-900 font-bold">{ct.total_pieces.toLocaleString()}개</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          <div className="space-y-3">
+            <h2 className="text-stone-500 text-xs font-semibold tracking-wider">매장 발주 내역</h2>
+            {loading ? (
+              <div className="text-center text-stone-400 py-10 text-sm">불러오는 중...</div>
+            ) : orders.length === 0 ? (
+              <div className="text-center text-stone-400 py-10 text-sm">이날 매장 발주가 없습니다</div>
+            ) : (
+              orders.map((order) => (
+                <div key={order.order_id} className="bg-white rounded-xl border border-stone-200 p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <div>
+                      <span className="text-stone-900 font-bold text-sm">{order.store_name}</span>
+                      <span className="text-stone-400 text-xs ml-2">
+                        {new Date(order.submitted_at).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}
+                      </span>
+                    </div>
+                    <span className={`text-xs px-2 py-1 rounded-md font-medium ${STATUS_STYLE[order.status] || "bg-stone-100 text-stone-500"}`}>
+                      {STATUS_LABEL[order.status] || order.status}
+                    </span>
+                  </div>
+
+                  <div className="mb-3 border border-stone-100 rounded-lg overflow-hidden">
+                    {(() => {
+                      const catMap = new Map<string, OrderItem[]>();
+                      for (const it of order.items) {
+                        const c = it.category || "기타";
+                        if (!catMap.has(c)) catMap.set(c, []);
+                        catMap.get(c)!.push(it);
+                      }
+                      const cats = CATEGORY_ORDER
+                        .filter(c => catMap.has(c))
+                        .concat([...catMap.keys()].filter(c => !CATEGORY_ORDER.includes(c)));
+                      return cats.map((cat, ci) => (
+                        <div key={cat}>
+                          <div className={`flex items-center px-3 py-2 bg-stone-50 border-b border-stone-100 ${ci > 0 ? "border-t border-stone-200" : ""}`}>
+                            <span className="text-stone-600 text-xs font-bold tracking-wider">{cat}</span>
+                            <span className="ml-auto text-stone-500 text-xs font-semibold">
+                              {catMap.get(cat)!.reduce((s, i) => s + i.quantity * i.pieces_per_unit, 0).toLocaleString()}개
+                            </span>
+                          </div>
+                          {catMap.get(cat)!.map((item) => {
+                            const pieces = item.quantity * item.pieces_per_unit;
+                            return (
+                              <div key={item.product_name} className="flex items-center gap-3 px-3 py-2.5 border-b border-stone-50 last:border-0">
+                                <span className="flex-1 text-stone-700 text-sm leading-tight">{item.product_name}</span>
+                                <span className="bg-stone-100 border border-stone-200 rounded px-2 py-0.5 text-stone-600 text-xs font-medium flex-shrink-0">{item.quantity}세트</span>
+                                <span className="text-stone-900 font-semibold text-sm w-14 text-right flex-shrink-0">{pieces.toLocaleString()}개</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ));
+                    })()}
+                  </div>
+
+                  <div className="flex gap-2 pt-3 border-t border-stone-100">
+                    {["confirmed", "producing", "done"].map((s) => (
+                      <button
+                        key={s}
+                        onClick={() => updateStatus(order.order_id, s)}
+                        disabled={order.status === s}
+                        className={`flex-1 text-xs py-2 rounded-lg transition-colors font-medium ${
+                          order.status === s
+                            ? "bg-emerald-700 text-white"
+                            : "bg-stone-100 text-stone-600 hover:bg-stone-200 border border-stone-200"
+                        }`}
+                      >
+                        {STATUS_LABEL[s]}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {lastUpdated && (
+            <p className="text-center text-stone-300 text-xs pt-2">
+              {lastUpdated.toLocaleTimeString("ko-KR")} 기준 · 30초 자동갱신
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* ===================== 통계 분석 탭 ===================== */}
+      {mainTab === "stats" && (
+        <div className="px-4 pt-4 space-y-4 pb-6">
+          {statsLoading ? (
+            <div className="text-center text-stone-400 py-16 text-sm">통계 불러오는 중...</div>
+          ) : (
+            <>
+              {/* 이번달 vs 지난달 요약 카드 */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-white rounded-xl p-4 border border-stone-200">
+                  <p className="text-stone-400 text-xs mb-1">이번달 생산량</p>
+                  <p className="text-2xl font-bold text-emerald-700">{thisMonthPieces.toLocaleString()}<span className="text-sm font-normal text-stone-400 ml-1">개</span></p>
+                  {lastMonthPieces > 0 && (
+                    <p className={`text-xs mt-1 font-medium ${pieceDiff >= 0 ? "text-emerald-600" : "text-red-500"}`}>
+                      {pieceDiff >= 0 ? "▲" : "▼"} {Math.abs(pieceDiffPct)}% 전달 대비
+                    </p>
+                  )}
+                </div>
+                <div className="bg-white rounded-xl p-4 border border-stone-200">
+                  <p className="text-stone-400 text-xs mb-1">지난달 생산량</p>
+                  <p className="text-2xl font-bold text-stone-700">{lastMonthPieces.toLocaleString()}<span className="text-sm font-normal text-stone-400 ml-1">개</span></p>
+                  <p className="text-xs mt-1 text-stone-400">기준 달</p>
+                </div>
+              </div>
+
+              {/* 월별 생산량 추이 */}
+              <div className="bg-white rounded-xl border border-stone-200 overflow-hidden">
+                <div className="px-4 py-3 border-b border-stone-100">
+                  <p className="text-stone-700 font-bold text-sm">월별 생산량 추이</p>
+                  <p className="text-stone-400 text-xs">최근 6개월</p>
+                </div>
+                <div className="px-2 py-4">
+                  <ResponsiveContainer width="100%" height={180}>
+                    <BarChart data={monthlyData} margin={{ top: 4, right: 8, left: -20, bottom: 0 }}>
+                      <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#78716c" }} axisLine={false} tickLine={false} />
+                      <YAxis tick={{ fontSize: 10, fill: "#a8a29e" }} axisLine={false} tickLine={false} tickFormatter={(v) => v >= 1000 ? `${Math.round(v / 1000)}k` : v} />
+                      <Tooltip
+                        contentStyle={{ background: "#fff", border: "1px solid #e7e5e4", borderRadius: 8, fontSize: 12 }}
+                        formatter={(v) => [`${v.toLocaleString()}개`, "생산량"]}
+                      />
+                      <Bar dataKey="pieces" fill="#059669" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              {/* 이번달 카테고리별 비중 */}
+              {categoryStats.length > 0 && (
+                <div className="bg-white rounded-xl border border-stone-200 overflow-hidden">
+                  <div className="px-4 py-3 border-b border-stone-100">
+                    <p className="text-stone-700 font-bold text-sm">이번달 카테고리별</p>
+                    <p className="text-stone-400 text-xs">생산량 비중</p>
+                  </div>
+                  <div className="flex items-center gap-0 px-2 py-4">
+                    <ResponsiveContainer width="45%" height={160}>
+                      <PieChart>
+                        <Pie data={categoryStats} dataKey="pieces" nameKey="category" cx="50%" cy="50%" outerRadius={70} innerRadius={35}>
+                          {categoryStats.map((_, i) => (
+                            <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                          ))}
+                        </Pie>
+                        <Tooltip
+                          contentStyle={{ background: "#fff", border: "1px solid #e7e5e4", borderRadius: 8, fontSize: 12 }}
+                          formatter={(v) => [`${v.toLocaleString()}개`]}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
+                    <div className="flex-1 space-y-1.5 pr-4">
+                      {categoryStats.slice(0, 6).map((c, i) => (
+                        <div key={c.category} className="flex items-center gap-2">
+                          <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: PIE_COLORS[i % PIE_COLORS.length] }} />
+                          <span className="text-stone-600 text-xs flex-1 truncate">{c.category}</span>
+                          <span className="text-stone-900 text-xs font-semibold">{c.pieces.toLocaleString()}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* 이번달 매장별 발주 순위 */}
+              {storeStats.length > 0 && (
+                <div className="bg-white rounded-xl border border-stone-200 overflow-hidden">
+                  <div className="px-4 py-3 border-b border-stone-100">
+                    <p className="text-stone-700 font-bold text-sm">이번달 매장별 발주 순위</p>
+                  </div>
+                  <div className="px-2 py-4">
+                    <ResponsiveContainer width="100%" height={Math.max(120, storeStats.length * 36)}>
+                      <BarChart data={storeStats} layout="vertical" margin={{ top: 0, right: 40, left: 8, bottom: 0 }}>
+                        <XAxis type="number" tick={{ fontSize: 10, fill: "#a8a29e" }} axisLine={false} tickLine={false} tickFormatter={(v) => v >= 1000 ? `${Math.round(v / 1000)}k` : v} />
+                        <YAxis type="category" dataKey="store" tick={{ fontSize: 11, fill: "#78716c" }} axisLine={false} tickLine={false} width={52} />
+                        <Tooltip
+                          contentStyle={{ background: "#fff", border: "1px solid #e7e5e4", borderRadius: 8, fontSize: 12 }}
+                          formatter={(v) => [`${v.toLocaleString()}개`, "생산량"]}
+                        />
+                        <Bar dataKey="pieces" fill="#10b981" radius={[0, 4, 4, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              )}
+
+              {/* AI 요약 */}
+              <div className="bg-white rounded-xl border border-stone-200 overflow-hidden">
+                <div className="px-4 py-3 border-b border-stone-100 flex items-center justify-between">
+                  <div>
+                    <p className="text-stone-700 font-bold text-sm">AI 현황 요약</p>
+                    <p className="text-stone-400 text-xs">Claude가 데이터를 분석합니다</p>
+                  </div>
+                  <button
+                    onClick={getAiSummary}
+                    disabled={aiLoading}
+                    className="bg-emerald-700 hover:bg-emerald-800 disabled:bg-stone-200 disabled:text-stone-400 text-white text-xs font-semibold px-3 py-1.5 rounded-lg transition-colors"
+                  >
+                    {aiLoading ? "분석 중..." : "분석하기"}
+                  </button>
+                </div>
+                {aiSummary ? (
+                  <div className="px-4 py-4">
+                    <p className="text-stone-700 text-sm leading-relaxed whitespace-pre-line">{aiSummary}</p>
+                  </div>
+                ) : (
+                  <div className="px-4 py-6 text-center text-stone-400 text-sm">
+                    분석하기 버튼을 누르면 AI가 현황을 요약합니다
+                  </div>
+                )}
+              </div>
+            </>
+          )}
+        </div>
       )}
     </div>
   );
