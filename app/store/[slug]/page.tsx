@@ -167,9 +167,17 @@ export default function StorePage() {
     }
   }
 
+  function isBeforeDeadline(): boolean {
+    if (!store?.order_deadline) return true;
+    const now = new Date();
+    const [h, m] = store.order_deadline.slice(0, 5).split(":").map(Number);
+    const deadline = new Date();
+    deadline.setHours(h, m, 0, 0);
+    return now < deadline;
+  }
+
   function handleEdit() {
     setSubmitted(false);
-    // quantities와 senderName 유지 — 수정 모드
   }
 
   function handleReset() {
@@ -223,12 +231,18 @@ export default function StorePage() {
                 ))}
               </ul>
               <div className="flex flex-col gap-3 w-full max-w-xs">
-                <button
-                  onClick={handleEdit}
-                  className="w-full bg-emerald-700 text-white font-semibold py-3 rounded-2xl text-sm"
-                >
-                  수정하기
-                </button>
+                {isBeforeDeadline() ? (
+                  <button
+                    onClick={handleEdit}
+                    className="w-full bg-emerald-700 text-white font-semibold py-3 rounded-2xl text-sm"
+                  >
+                    수정하기
+                  </button>
+                ) : (
+                  <div className="w-full bg-stone-100 text-stone-400 font-semibold py-3 rounded-2xl text-sm text-center">
+                    마감됨 — 수정 불가 ({store?.order_deadline?.slice(0, 5)} 이후)
+                  </div>
+                )}
                 <button
                   onClick={handleReset}
                   className="text-stone-400 text-sm py-2"
@@ -310,18 +324,26 @@ export default function StorePage() {
               {/* 하단 고정 버튼 */}
               <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-stone-200 p-4 space-y-2">
                 {error && <p className="text-red-500 text-sm text-center">{error}</p>}
-                {items.length > 0 && (
-                  <p className="text-stone-400 text-xs text-center">
-                    {items.length}개 품목 · 총 {items.reduce((s, i) => s + i.quantity, 0)}개
-                  </p>
+                {!isBeforeDeadline() ? (
+                  <div className="w-full bg-stone-100 text-stone-400 font-bold py-4 rounded-2xl text-center text-sm">
+                    마감됨 ({store?.order_deadline?.slice(0, 5)} 이후 발주 불가)
+                  </div>
+                ) : (
+                  <>
+                    {items.length > 0 && (
+                      <p className="text-stone-400 text-xs text-center">
+                        {items.length}개 품목 · 총 {items.reduce((s, i) => s + i.quantity, 0)}개
+                      </p>
+                    )}
+                    <button
+                      onClick={handleSubmit}
+                      disabled={submitting}
+                      className="w-full bg-emerald-700 hover:bg-emerald-800 disabled:bg-stone-100 disabled:text-stone-400 text-white font-bold py-4 rounded-2xl transition-colors"
+                    >
+                      {submitting ? "전송 중..." : orderId ? "수정 저장" : "발주 전송"}
+                    </button>
+                  </>
                 )}
-                <button
-                  onClick={handleSubmit}
-                  disabled={submitting}
-                  className="w-full bg-emerald-700 hover:bg-emerald-800 disabled:bg-stone-100 disabled:text-stone-400 text-white font-bold py-4 rounded-2xl transition-colors"
-                >
-                  {submitting ? "전송 중..." : orderId ? "수정 저장" : "발주 전송"}
-                </button>
               </div>
             </div>
           )}
