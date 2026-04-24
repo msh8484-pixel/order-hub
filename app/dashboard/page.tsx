@@ -322,19 +322,19 @@ export default function DashboardPage() {
                     return cats.map((cat, ci) => (
                       <div key={cat}>
                         {/* 카테고리 구분행 */}
-                        <div className={`flex items-center px-3 py-1.5 bg-stone-50 ${ci > 0 ? "border-t border-stone-100" : ""}`}>
-                          <span className="text-stone-500 text-xs font-semibold tracking-wider">{cat}</span>
-                          <span className="ml-auto text-stone-400 text-xs">
+                        <div className={`flex items-center px-3 py-2 bg-stone-50 border-b border-stone-100 ${ci > 0 ? "border-t border-stone-200" : ""}`}>
+                          <span className="text-stone-600 text-xs font-bold tracking-wider">{cat}</span>
+                          <span className="ml-auto text-stone-500 text-xs font-semibold">
                             {catMap.get(cat)!.reduce((s, i) => s + i.quantity * i.pieces_per_unit, 0).toLocaleString()}개
                           </span>
                         </div>
                         {catMap.get(cat)!.map((item) => {
                           const pieces = item.quantity * item.pieces_per_unit;
                           return (
-                            <div key={item.product_name} className="flex items-center gap-2 px-3 py-2 border-t border-stone-50">
-                              <span className="flex-1 text-stone-700 text-sm">{item.product_name}</span>
-                              <span className="text-stone-400 text-xs w-14 text-right">{item.quantity}세트</span>
-                              <span className="text-stone-900 font-semibold text-sm w-14 text-right">{pieces.toLocaleString()}개</span>
+                            <div key={item.product_name} className="flex items-center gap-3 px-3 py-2.5 border-b border-stone-50 last:border-0">
+                              <span className="flex-1 text-stone-700 text-sm leading-tight">{item.product_name}</span>
+                              <span className="bg-stone-100 border border-stone-200 rounded px-2 py-0.5 text-stone-600 text-xs font-medium flex-shrink-0">{item.quantity}세트</span>
+                              <span className="text-stone-900 font-semibold text-sm w-14 text-right flex-shrink-0">{pieces.toLocaleString()}개</span>
                             </div>
                           );
                         })}

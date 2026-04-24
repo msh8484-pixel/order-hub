@@ -219,22 +219,16 @@ export default function ProductionPage() {
             categoryGroups.map((group) => (
               <div key={group.category} className="bg-white border border-stone-200 rounded-xl overflow-hidden">
                 {/* 카테고리 헤더 */}
-                <div className="px-4 py-2.5 bg-stone-800 flex items-center justify-between">
+                <div className="px-4 py-2.5 bg-emerald-700 flex items-center justify-between">
                   <span className="text-white font-bold text-sm">{group.category}</span>
-                  <span className="text-emerald-300 font-bold text-base">{group.total_pieces.toLocaleString()}개</span>
-                </div>
-                {/* 컬럼 헤더 */}
-                <div className="flex items-center gap-2 px-4 py-1.5 bg-stone-50 border-b border-stone-100">
-                  <span className="flex-1 text-stone-400 text-xs">품목</span>
-                  <span className="text-stone-400 text-xs w-16 text-right">세트</span>
-                  <span className="text-stone-400 text-xs w-14 text-right">생산량</span>
+                  <span className="text-emerald-100 font-bold text-base">{group.total_pieces.toLocaleString()}개</span>
                 </div>
                 {/* 품목 행 */}
                 {group.items.map((item) => (
-                  <div key={item.product_name} className="flex items-center gap-2 px-4 py-2.5 border-b border-stone-50 last:border-0">
-                    <span className="flex-1 text-stone-800 text-sm">{item.product_name}</span>
-                    <span className="text-stone-500 text-xs w-16 text-right">{item.set_qty}세트</span>
-                    <span className="text-stone-900 font-bold text-sm w-14 text-right">{item.total_pieces.toLocaleString()}개</span>
+                  <div key={item.product_name} className="flex items-center gap-3 px-4 py-3 border-b border-stone-100 last:border-0">
+                    <span className="flex-1 text-stone-800 text-sm leading-tight">{item.product_name}</span>
+                    <span className="bg-stone-100 border border-stone-200 rounded px-2 py-1 text-stone-600 text-xs font-medium flex-shrink-0">{item.set_qty}세트</span>
+                    <span className="text-stone-900 font-bold text-sm w-16 text-right flex-shrink-0">{item.total_pieces.toLocaleString()}개</span>
                   </div>
                 ))}
               </div>
@@ -261,32 +255,24 @@ export default function ProductionPage() {
             return (
               <div key={store.store_name} className="bg-white border border-stone-200 rounded-xl overflow-hidden">
                 {/* 매장 헤더 */}
-                <div className="px-4 py-2.5 bg-stone-800 flex justify-between items-center">
+                <div className="px-4 py-2.5 bg-emerald-700 flex justify-between items-center">
                   <span className="text-white font-bold text-sm">{store.store_name}</span>
-                  <span className="text-emerald-300 font-bold text-base">총 {store.total_pieces.toLocaleString()}개</span>
+                  <span className="text-emerald-100 font-bold text-base">총 {store.total_pieces.toLocaleString()}개</span>
                 </div>
                 {storeCats.map((cat, ci) => (
                   <div key={cat}>
                     {/* 카테고리 구분행 */}
-                    <div className={`flex items-center px-4 py-1.5 bg-stone-50 ${ci > 0 ? "border-t border-stone-200" : ""} border-b border-stone-100`}>
-                      <span className="text-stone-500 text-xs font-semibold tracking-wider">{cat}</span>
-                      <span className="ml-auto text-stone-400 text-xs">
+                    <div className={`flex items-center px-4 py-2 bg-stone-50 border-b border-stone-100 ${ci > 0 ? "border-t border-stone-200" : ""}`}>
+                      <span className="text-stone-600 text-xs font-bold tracking-wider">{cat}</span>
+                      <span className="ml-auto text-stone-500 text-xs font-semibold">
                         {storeCatMap.get(cat)!.reduce((s, i) => s + i.total_pieces, 0).toLocaleString()}개
                       </span>
                     </div>
-                    {/* 컬럼 헤더 — 첫 카테고리에만 */}
-                    {ci === 0 && (
-                      <div className="flex items-center gap-2 px-4 py-1 border-b border-stone-50">
-                        <span className="flex-1 text-stone-300 text-xs">품목</span>
-                        <span className="text-stone-300 text-xs w-16 text-right">세트</span>
-                        <span className="text-stone-300 text-xs w-14 text-right">생산량</span>
-                      </div>
-                    )}
                     {storeCatMap.get(cat)!.map((item) => (
-                      <div key={item.product_name} className="flex items-center gap-2 px-4 py-2.5 border-b border-stone-50 last:border-0">
-                        <span className="flex-1 text-stone-800 text-sm">{item.product_name}</span>
-                        <span className="text-stone-500 text-xs w-16 text-right">{item.set_qty}세트</span>
-                        <span className="text-stone-900 font-bold text-sm w-14 text-right">{item.total_pieces.toLocaleString()}개</span>
+                      <div key={item.product_name} className="flex items-center gap-3 px-4 py-3 border-b border-stone-100 last:border-0">
+                        <span className="flex-1 text-stone-800 text-sm leading-tight">{item.product_name}</span>
+                        <span className="bg-stone-100 border border-stone-200 rounded px-2 py-1 text-stone-600 text-xs font-medium flex-shrink-0">{item.set_qty}세트</span>
+                        <span className="text-stone-900 font-bold text-sm w-16 text-right flex-shrink-0">{item.total_pieces.toLocaleString()}개</span>
                       </div>
                     ))}
                   </div>
