@@ -10,6 +10,7 @@ type Product = {
   unit: string;
   is_active: boolean;
   sort_order: number;
+  pieces_per_unit: number;
 };
 
 const CATEGORIES = ["쑥인절미", "약밥", "무설탕", "개떡", "찹쌀떡", "찰떡", "설기", "현미", "음료", "답례떡", "기타"];
@@ -19,14 +20,15 @@ export default function AdminProductsPage() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editTarget, setEditTarget] = useState<Product | null>(null);
-  const [form, setForm] = useState({ name: "", category: "쑥인절미", unit: "개", sort_order: 0 });
+  const [form, setForm] = useState({ name: "", category: "쑥인절미", unit: "세트", pieces_per_unit: 1 });
   const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
     const { data } = await supabase
       .from("products")
       .select("*")
-      .order("sort_order");
+      .order("category")
+      .order("name");
     if (data) setProducts(data);
     setLoading(false);
   }, []);
@@ -35,13 +37,13 @@ export default function AdminProductsPage() {
 
   function openNew() {
     setEditTarget(null);
-    setForm({ name: "", category: "쑥인절미", unit: "개", sort_order: (products.length + 1) * 10 });
+    setForm({ name: "", category: "쑥인절미", unit: "세트", pieces_per_unit: 1 });
     setShowForm(true);
   }
 
   function openEdit(p: Product) {
     setEditTarget(p);
-    setForm({ name: p.name, category: p.category, unit: p.unit, sort_order: p.sort_order });
+    setForm({ name: p.name, category: p.category, unit: p.unit, pieces_per_unit: p.pieces_per_unit ?? 1 });
     setShowForm(true);
   }
 
@@ -53,15 +55,16 @@ export default function AdminProductsPage() {
         name: form.name,
         category: form.category,
         unit: form.unit,
-        sort_order: form.sort_order,
+        pieces_per_unit: form.pieces_per_unit,
       }).eq("id", editTarget.id);
     } else {
       await supabase.from("products").insert({
         name: form.name,
         category: form.category,
         unit: form.unit,
-        sort_order: form.sort_order,
+        pieces_per_unit: form.pieces_per_unit,
         is_active: true,
+        sort_order: products.length * 10,
       });
     }
     setSaving(false);
@@ -107,18 +110,19 @@ export default function AdminProductsPage() {
         ) : (
           Object.entries(grouped).map(([cat, items]) => (
             <div key={cat}>
-              <h3 className="text-stone-400 text-xs font-semibold uppercase tracking-widest mb-2 px-1">{cat}</h3>
+              <h3 className="text-stone-400 text-xs font-semibold tracking-widest mb-2 px-1">{cat}</h3>
               <div className="bg-white rounded-xl border border-stone-200 overflow-hidden">
                 {items.map((p, i) => (
                   <div
                     key={p.id}
-                    className={`px-4 py-3 flex items-center gap-3 ${
-                      i > 0 ? "border-t border-stone-100" : ""
-                    } ${!p.is_active ? "opacity-40" : ""}`}
+                    className={`px-4 py-3 flex items-center gap-3 ${i > 0 ? "border-t border-stone-100" : ""} ${!p.is_active ? "opacity-40" : ""}`}
                   >
                     <div className="flex-1 min-w-0">
                       <p className="text-stone-900 text-sm font-medium truncate">{p.name}</p>
-                      <p className="text-stone-400 text-xs mt-0.5">단위: {p.unit} · 순서: {p.sort_order}</p>
+                      <p className="text-stone-400 text-xs mt-0.5">
+                        세트당 {p.pieces_per_unit ?? 1}개
+                        {p.unit && p.unit !== "세트" ? ` · 단위: ${p.unit}` : ""}
+                      </p>
                     </div>
                     <div className="flex items-center gap-1.5 flex-shrink-0">
                       <button
@@ -165,7 +169,7 @@ export default function AdminProductsPage() {
                 <label className="text-stone-500 text-xs font-medium mb-1 block">상품명</label>
                 <input
                   type="text"
-                  placeholder="예: 쑥떡 쑥인절미 10개"
+                  placeholder="예: 쑥인절미 10구"
                   value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
                   className="w-full bg-stone-50 text-stone-900 placeholder-stone-300 rounded-lg px-4 py-3 text-sm outline-none border border-stone-200 focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
@@ -183,25 +187,31 @@ export default function AdminProductsPage() {
                 </select>
               </div>
 
-              <div className="flex gap-3">
-                <div className="flex-1">
-                  <label className="text-stone-500 text-xs font-medium mb-1 block">단위</label>
-                  <input
-                    type="text"
-                    value={form.unit}
-                    onChange={(e) => setForm({ ...form, unit: e.target.value })}
-                    className="w-full bg-stone-50 text-stone-900 rounded-lg px-4 py-3 text-sm outline-none border border-stone-200 focus:border-emerald-500"
-                  />
+              <div>
+                <label className="text-stone-500 text-xs font-medium mb-1 block">세트당 개수 (생산량 계산에 사용)</label>
+                <div className="flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setForm({ ...form, pieces_per_unit: Math.max(1, form.pieces_per_unit - 1) })}
+                    className="w-10 h-10 rounded-lg bg-stone-100 text-stone-600 font-bold border border-stone-200 text-lg flex items-center justify-center"
+                  >
+                    -
+                  </button>
+                  <div className="flex-1 text-center">
+                    <span className="text-2xl font-bold text-stone-900">{form.pieces_per_unit}</span>
+                    <span className="text-stone-400 text-sm ml-1">개</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setForm({ ...form, pieces_per_unit: form.pieces_per_unit + 1 })}
+                    className="w-10 h-10 rounded-lg bg-stone-100 text-stone-600 font-bold border border-stone-200 text-lg flex items-center justify-center"
+                  >
+                    +
+                  </button>
                 </div>
-                <div className="flex-1">
-                  <label className="text-stone-500 text-xs font-medium mb-1 block">정렬 순서</label>
-                  <input
-                    type="number"
-                    value={form.sort_order}
-                    onChange={(e) => setForm({ ...form, sort_order: parseInt(e.target.value) || 0 })}
-                    className="w-full bg-stone-50 text-stone-900 rounded-lg px-4 py-3 text-sm outline-none border border-stone-200 focus:border-emerald-500"
-                  />
-                </div>
+                <p className="text-stone-300 text-xs text-center mt-1">
+                  예) 10구 세트 → 10 입력 · 발주 3세트 = 생산 30개
+                </p>
               </div>
             </div>
 
