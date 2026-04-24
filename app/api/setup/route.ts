@@ -98,7 +98,7 @@ export async function GET(request: Request) {
   }
 
   const connectionString = process.env.DATABASE_URL ||
-    `postgresql://postgres.qxaknocanyetglkvpacj:${encodeURIComponent("Miamia0406@@")}@aws-0-ap-northeast-2.pooler.supabase.com:6543/postgres`;
+    `postgresql://postgres:${encodeURIComponent("Miamia0406@@")}@db.qxaknocanyetglkvpacj.supabase.co:5432/postgres`;
 
   const client = new Client({ connectionString, ssl: { rejectUnauthorized: false } });
 
