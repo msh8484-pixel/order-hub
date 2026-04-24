@@ -20,12 +20,12 @@ const STATUS_LABEL: Record<string, string> = {
   cancelled: "취소",
 };
 
-const STATUS_COLOR: Record<string, string> = {
-  pending: "bg-yellow-500",
-  confirmed: "bg-blue-500",
-  producing: "bg-orange-500",
-  done: "bg-green-500",
-  cancelled: "bg-gray-500",
+const STATUS_STYLE: Record<string, string> = {
+  pending: "bg-amber-50 text-amber-700 border border-amber-200",
+  confirmed: "bg-blue-50 text-blue-700 border border-blue-200",
+  producing: "bg-orange-50 text-orange-700 border border-orange-200",
+  done: "bg-emerald-50 text-emerald-700 border border-emerald-200",
+  cancelled: "bg-stone-100 text-stone-500 border border-stone-200",
 };
 
 export default function DashboardPage() {
@@ -84,34 +84,28 @@ export default function DashboardPage() {
     load();
   }
 
+  function moveDate(days: number) {
+    const d = new Date(selectedDate);
+    d.setDate(d.getDate() + days);
+    setSelectedDate(d.toISOString().slice(0, 10));
+  }
+
   const totalItems = orders.reduce((s, o) => s + o.items.reduce((ss, i) => ss + i.quantity, 0), 0);
   const storeCount = new Set(orders.map((o) => o.store_id)).size;
 
   return (
-    <div className="min-h-screen bg-gray-950 pb-10">
-      {/* 헤더 */}
-      <div className="sticky top-0 z-10 bg-gray-900 border-b border-gray-800 px-4 py-3">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-white font-bold text-lg">사장님 대시보드</h1>
-            <p className="text-gray-400 text-xs">
-              매장 {storeCount}곳 · 총 {totalItems.toLocaleString()}개
-            </p>
-          </div>
-          <button onClick={load} className="text-indigo-400 text-sm font-medium">
+    <div className="min-h-screen bg-stone-50 pb-20">
+      <div className="sticky top-0 z-10 bg-white border-b border-stone-200 px-4 py-3">
+        <div className="flex items-center justify-between mb-2">
+          <h1 className="text-stone-900 font-bold text-base">사장님 대시보드</h1>
+          <button onClick={load} className="text-emerald-700 text-sm font-medium">
             새로고침
           </button>
         </div>
-
-        {/* 날짜 선택 */}
-        <div className="mt-2 flex gap-2">
+        <div className="flex gap-2">
           <button
-            onClick={() => {
-              const d = new Date(selectedDate);
-              d.setDate(d.getDate() - 1);
-              setSelectedDate(d.toISOString().slice(0, 10));
-            }}
-            className="text-gray-400 px-2 py-1 bg-gray-800 rounded-lg text-sm"
+            onClick={() => moveDate(-1)}
+            className="text-stone-600 px-3 py-2 bg-stone-100 rounded-lg text-sm border border-stone-200"
           >
             ←
           </button>
@@ -119,86 +113,76 @@ export default function DashboardPage() {
             type="date"
             value={selectedDate}
             onChange={(e) => setSelectedDate(e.target.value)}
-            className="flex-1 bg-gray-800 text-white text-sm rounded-lg px-3 py-1 outline-none"
+            className="flex-1 bg-stone-50 text-stone-900 text-sm rounded-lg px-3 py-2 outline-none border border-stone-200 focus:border-emerald-500"
           />
           <button
-            onClick={() => {
-              const d = new Date(selectedDate);
-              d.setDate(d.getDate() + 1);
-              setSelectedDate(d.toISOString().slice(0, 10));
-            }}
-            className="text-gray-400 px-2 py-1 bg-gray-800 rounded-lg text-sm"
+            onClick={() => moveDate(1)}
+            className="text-stone-600 px-3 py-2 bg-stone-100 rounded-lg text-sm border border-stone-200"
           >
             →
           </button>
         </div>
       </div>
 
-      {/* 요약 카드 */}
       <div className="px-4 pt-4 grid grid-cols-3 gap-3 mb-4">
-        <div className="bg-gray-800 rounded-2xl p-3 text-center">
-          <p className="text-2xl font-bold text-white">{orders.length}</p>
-          <p className="text-gray-400 text-xs mt-1">발주 건수</p>
+        <div className="bg-white rounded-xl p-3 text-center border border-stone-200">
+          <p className="text-2xl font-bold text-stone-900">{orders.length}</p>
+          <p className="text-stone-400 text-xs mt-1">발주 건수</p>
         </div>
-        <div className="bg-gray-800 rounded-2xl p-3 text-center">
-          <p className="text-2xl font-bold text-indigo-400">{storeCount}</p>
-          <p className="text-gray-400 text-xs mt-1">참여 매장</p>
+        <div className="bg-white rounded-xl p-3 text-center border border-stone-200">
+          <p className="text-2xl font-bold text-emerald-700">{storeCount}</p>
+          <p className="text-stone-400 text-xs mt-1">참여 매장</p>
         </div>
-        <div className="bg-gray-800 rounded-2xl p-3 text-center">
-          <p className="text-2xl font-bold text-green-400">{totalItems.toLocaleString()}</p>
-          <p className="text-gray-400 text-xs mt-1">총 수량</p>
+        <div className="bg-white rounded-xl p-3 text-center border border-stone-200">
+          <p className="text-2xl font-bold text-stone-900">{totalItems.toLocaleString()}</p>
+          <p className="text-stone-400 text-xs mt-1">총 수량</p>
         </div>
       </div>
 
-      {/* 발주 목록 */}
       <div className="px-4 space-y-3">
         {loading ? (
-          <div className="text-center text-gray-500 py-16">로딩 중...</div>
+          <div className="text-center text-stone-400 py-16 text-sm">불러오는 중...</div>
         ) : orders.length === 0 ? (
-          <div className="text-center text-gray-500 py-16">
-            <p className="text-4xl mb-3">📋</p>
-            <p>{selectedDate} 매장 발주 없음</p>
+          <div className="text-center text-stone-400 py-16 text-sm">
+            {selectedDate} 매장 발주 없음
           </div>
         ) : (
           orders.map((order) => (
-            <div key={order.order_id} className="bg-gray-800 rounded-2xl p-4">
-              {/* 매장명 + 상태 */}
+            <div key={order.order_id} className="bg-white rounded-xl border border-stone-200 p-4">
               <div className="flex items-center justify-between mb-3">
                 <div>
-                  <span className="text-white font-bold">{order.store_name}</span>
-                  <span className="text-gray-500 text-xs ml-2">
+                  <span className="text-stone-900 font-bold text-sm">{order.store_name}</span>
+                  <span className="text-stone-400 text-xs ml-2">
                     {new Date(order.submitted_at).toLocaleTimeString("ko-KR", {
                       hour: "2-digit",
                       minute: "2-digit",
                     })}
                   </span>
                 </div>
-                <span className={`text-xs text-white px-2 py-1 rounded-full ${STATUS_COLOR[order.status] || "bg-gray-600"}`}>
+                <span className={`text-xs px-2 py-1 rounded-md font-medium ${STATUS_STYLE[order.status] || "bg-stone-100 text-stone-500"}`}>
                   {STATUS_LABEL[order.status] || order.status}
                 </span>
               </div>
 
-              {/* 품목 목록 */}
               <div className="space-y-1 mb-3">
                 {order.items.map((item, i) => (
                   <div key={i} className="flex justify-between text-sm">
-                    <span className="text-gray-300">{item.product_name}</span>
-                    <span className="text-white font-semibold">{item.quantity}개</span>
+                    <span className="text-stone-600">{item.product_name}</span>
+                    <span className="text-stone-900 font-semibold">{item.quantity}개</span>
                   </div>
                 ))}
               </div>
 
-              {/* 상태 변경 버튼 */}
-              <div className="flex gap-2 mt-3 pt-3 border-t border-gray-700">
+              <div className="flex gap-2 pt-3 border-t border-stone-100">
                 {["confirmed", "producing", "done"].map((s) => (
                   <button
                     key={s}
                     onClick={() => updateStatus(order.order_id, s)}
                     disabled={order.status === s}
-                    className={`flex-1 text-xs py-1.5 rounded-lg transition-colors ${
+                    className={`flex-1 text-xs py-2 rounded-lg transition-colors font-medium ${
                       order.status === s
-                        ? "bg-indigo-600 text-white"
-                        : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                        ? "bg-emerald-700 text-white"
+                        : "bg-stone-100 text-stone-600 hover:bg-stone-200 border border-stone-200"
                     }`}
                   >
                     {STATUS_LABEL[s]}
@@ -211,7 +195,7 @@ export default function DashboardPage() {
       </div>
 
       {lastUpdated && (
-        <p className="text-center text-gray-600 text-xs pt-6">
+        <p className="text-center text-stone-300 text-xs pt-6">
           {lastUpdated.toLocaleTimeString("ko-KR")} 기준 · 30초 자동갱신
         </p>
       )}

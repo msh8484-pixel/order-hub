@@ -27,7 +27,7 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="ko" className={geist.variable}>
-      <body className="min-h-screen bg-gray-950 text-white antialiased pb-16">
+      <body className="min-h-screen bg-stone-50 text-stone-900 antialiased pb-16">
         {children}
         <BottomNav />
       </body>
