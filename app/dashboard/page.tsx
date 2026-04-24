@@ -327,7 +327,10 @@ export default function DashboardPage() {
                             return (
                               <div key={i} className="flex justify-between text-sm py-0.5">
                                 <span className="text-stone-600">{item.product_name}</span>
-                                <span className="text-stone-900 font-semibold">{pieces.toLocaleString()}개</span>
+                                <span className="text-stone-500">
+                                  <span className="text-stone-400">{item.quantity}세트 · </span>
+                                  <span className="text-stone-900 font-semibold">{pieces.toLocaleString()}개</span>
+                                </span>
                               </div>
                             );
                           })}
