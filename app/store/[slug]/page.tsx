@@ -16,6 +16,7 @@ type Store = {
   name: string;
   slug: string;
   order_deadline: string;
+  contact_name: string;
 };
 
 type OrderItem = {
@@ -71,7 +72,10 @@ export default function StorePage() {
         supabase.from("stores").select("*").eq("slug", slug).single(),
         supabase.from("products").select("*").eq("is_active", true).order("sort_order"),
       ]);
-      if (storeData) setStore(storeData);
+      if (storeData) {
+        setStore(storeData);
+        if (storeData.contact_name) setSenderName(storeData.contact_name);
+      }
       if (productData) setProducts(productData);
     }
     load();

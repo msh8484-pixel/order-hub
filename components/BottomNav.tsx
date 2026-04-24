@@ -8,7 +8,7 @@ const NAV = [
   { href: "/production", label: "생산" },
   { href: "/dashboard", label: "대시보드" },
   { href: "/chat", label: "채팅" },
-  { href: "/admin/products", label: "메뉴" },
+  { href: "/admin", label: "설정" },
 ];
 
 export default function BottomNav() {
