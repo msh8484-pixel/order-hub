@@ -320,7 +320,7 @@ export default function StorePage() {
               </div>
 
               {/* 발주 전송 버튼 — 글로벌 네비(bottom-0~16) 바로 위 */}
-              <div className="fixed bottom-16 left-0 right-0 z-40 bg-white border-t border-stone-200 px-4 pt-3 pb-2 space-y-2">
+              <div className="fixed bottom-16 left-0 right-0 z-[55] bg-white border-t border-stone-200 px-4 pt-3 pb-3 space-y-2">
                 {error && <p className="text-red-500 text-sm text-center">{error}</p>}
                 {!isBeforeDeadline() ? (
                   <div className="w-full bg-stone-100 text-stone-400 font-bold py-3.5 rounded-2xl text-center text-sm">

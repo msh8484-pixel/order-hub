@@ -316,10 +316,10 @@ function ProductsTab() {
         )}
       </div>
 
-      {/* 상품 추가/수정 모달 — bottom-16으로 글로벌 네비 위에 표시 */}
+      {/* 상품 추가/수정 모달 */}
       {showForm && (
-        <div className="fixed inset-x-0 top-0 bottom-16 z-[60] flex items-end bg-black/40" onClick={() => setShowForm(false)}>
-          <div className="bg-white w-full rounded-t-2xl flex flex-col max-h-full" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[60] flex items-end bg-black/40" onClick={() => setShowForm(false)}>
+          <div className="bg-white w-full rounded-t-2xl flex flex-col max-h-[85vh]" onClick={(e) => e.stopPropagation()}>
             {/* 헤더 */}
             <div className="flex items-center justify-between px-6 pt-5 pb-3 border-b border-stone-100 flex-shrink-0">
               <h2 className="text-stone-900 font-bold text-base">{editTarget ? "상품 수정" : "상품 추가"}</h2>
@@ -386,7 +386,7 @@ function ProductsTab() {
             </div>
 
             {/* 저장 버튼 고정 */}
-            <div className="px-6 pb-5 pt-3 border-t border-stone-100 flex-shrink-0">
+            <div className="px-6 pb-8 pt-3 border-t border-stone-100 flex-shrink-0">
               <button onClick={save} disabled={saving || !form.name.trim()}
                 className="w-full bg-emerald-700 hover:bg-emerald-800 disabled:bg-stone-200 disabled:text-stone-400 text-white font-bold py-4 rounded-xl transition-colors">
                 {saving ? "저장 중..." : "저장"}
