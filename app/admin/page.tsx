@@ -204,6 +204,9 @@ function ProductsTab() {
   const [editTarget, setEditTarget] = useState<Product | null>(null);
   const [form, setForm] = useState({ name: "", category: "쑥인절미", unit: "세트", pieces_per_unit: 1 });
   const [saving, setSaving] = useState(false);
+  const [customCategories, setCustomCategories] = useState<string[]>([]);
+  const [addingCat, setAddingCat] = useState(false);
+  const [newCatInput, setNewCatInput] = useState("");
 
   const load = useCallback(async () => {
     const { data } = await supabase.from("products").select("*").order("category").order("name");
@@ -213,16 +216,35 @@ function ProductsTab() {
 
   useEffect(() => { load(); }, [load]);
 
+  const allCategories = [...CATEGORIES, ...customCategories.filter(c => !CATEGORIES.includes(c))];
+
   function openNew() {
     setEditTarget(null);
     setForm({ name: "", category: "쑥인절미", unit: "세트", pieces_per_unit: 1 });
+    setAddingCat(false);
+    setNewCatInput("");
     setShowForm(true);
   }
 
   function openEdit(p: Product) {
     setEditTarget(p);
     setForm({ name: p.name, category: p.category, unit: p.unit, pieces_per_unit: p.pieces_per_unit ?? 1 });
+    // 기존 상품 카테고리가 목록에 없으면 커스텀에 추가
+    if (!allCategories.includes(p.category)) {
+      setCustomCategories(prev => [...prev, p.category]);
+    }
+    setAddingCat(false);
+    setNewCatInput("");
     setShowForm(true);
+  }
+
+  function confirmNewCat() {
+    const cat = newCatInput.trim();
+    if (!cat) return;
+    if (!allCategories.includes(cat)) setCustomCategories(prev => [...prev, cat]);
+    setForm(f => ({ ...f, category: cat }));
+    setAddingCat(false);
+    setNewCatInput("");
   }
 
   async function save() {
@@ -294,11 +316,11 @@ function ProductsTab() {
         )}
       </div>
 
-      {/* 상품 추가/수정 모달 */}
+      {/* 상품 추가/수정 모달 — bottom-16으로 글로벌 네비 위에 표시 */}
       {showForm && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-end" onClick={() => setShowForm(false)}>
-          <div className="bg-white w-full rounded-t-2xl flex flex-col max-h-[85vh]" onClick={(e) => e.stopPropagation()}>
-            {/* 헤더 고정 */}
+        <div className="fixed inset-x-0 top-0 bottom-16 z-[60] flex items-end bg-black/40" onClick={() => setShowForm(false)}>
+          <div className="bg-white w-full rounded-t-2xl flex flex-col max-h-full" onClick={(e) => e.stopPropagation()}>
+            {/* 헤더 */}
             <div className="flex items-center justify-between px-6 pt-5 pb-3 border-b border-stone-100 flex-shrink-0">
               <h2 className="text-stone-900 font-bold text-base">{editTarget ? "상품 수정" : "상품 추가"}</h2>
               <button onClick={() => setShowForm(false)} className="text-stone-400 text-xl leading-none w-8 h-8 flex items-center justify-center">✕</button>
@@ -316,16 +338,34 @@ function ProductsTab() {
               <div>
                 <label className="text-stone-500 text-xs font-medium mb-2 block">카테고리</label>
                 <div className="flex flex-wrap gap-2">
-                  {CATEGORIES.map((c) => (
+                  {allCategories.map((c) => (
                     <button key={c} type="button" onClick={() => setForm({ ...form, category: c })}
                       className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
-                        form.category === c
-                          ? "bg-emerald-700 text-white border-emerald-700"
-                          : "bg-stone-50 text-stone-600 border-stone-200"
+                        form.category === c ? "bg-emerald-700 text-white border-emerald-700" : "bg-stone-50 text-stone-600 border-stone-200"
                       }`}>
                       {c}
                     </button>
                   ))}
+                  {addingCat ? (
+                    <div className="flex items-center gap-1">
+                      <input
+                        autoFocus
+                        type="text"
+                        value={newCatInput}
+                        onChange={(e) => setNewCatInput(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === "Enter") confirmNewCat(); if (e.key === "Escape") setAddingCat(false); }}
+                        placeholder="새 카테고리"
+                        className="w-24 px-2 py-1.5 rounded-lg text-sm border border-emerald-400 outline-none focus:ring-2 focus:ring-emerald-500"
+                      />
+                      <button type="button" onClick={confirmNewCat} className="text-emerald-700 text-sm font-bold px-1">✓</button>
+                      <button type="button" onClick={() => { setAddingCat(false); setNewCatInput(""); }} className="text-stone-400 text-sm px-1">✕</button>
+                    </div>
+                  ) : (
+                    <button type="button" onClick={() => setAddingCat(true)}
+                      className="px-3 py-1.5 rounded-lg text-sm font-medium border border-dashed border-stone-300 text-stone-400">
+                      + 직접입력
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -346,7 +386,7 @@ function ProductsTab() {
             </div>
 
             {/* 저장 버튼 고정 */}
-            <div className="px-6 pb-6 pt-3 border-t border-stone-100 flex-shrink-0">
+            <div className="px-6 pb-5 pt-3 border-t border-stone-100 flex-shrink-0">
               <button onClick={save} disabled={saving || !form.name.trim()}
                 className="w-full bg-emerald-700 hover:bg-emerald-800 disabled:bg-stone-200 disabled:text-stone-400 text-white font-bold py-4 rounded-xl transition-colors">
                 {saving ? "저장 중..." : "저장"}
