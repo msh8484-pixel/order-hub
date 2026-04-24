@@ -196,21 +196,6 @@ export default function StorePage() {
         <p className="text-stone-400 text-xs">마감: {store?.order_deadline?.slice(0, 5) || "14:00"} 이전</p>
       </div>
 
-      {/* 탭 */}
-      <div className="bg-white border-b border-stone-100 px-4 pt-2 pb-0 flex gap-0">
-        {([["order", "발주 입력"], ["history", "오늘 내역"]] as ["order" | "history", string][]).map(([key, label]) => (
-          <button
-            key={key}
-            onClick={() => setTab(key)}
-            className={`flex-1 text-sm font-medium py-2.5 border-b-2 transition-colors ${
-              tab === key ? "border-emerald-700 text-emerald-700" : "border-transparent text-stone-400"
-            }`}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-
       {/* ===== 발주 입력 탭 ===== */}
       {tab === "order" && (
         <>
@@ -252,7 +237,7 @@ export default function StorePage() {
               </div>
             </div>
           ) : (
-            <div className="flex-1 pb-32">
+            <div className="flex-1 pb-44">
               {orderId && (
                 <div className="mx-4 mt-3 px-3 py-2 bg-amber-50 border border-amber-200 rounded-xl text-amber-700 text-xs font-medium">
                   수정 모드 — 저장하면 기존 발주가 교체됩니다
@@ -321,29 +306,46 @@ export default function StorePage() {
                 ))}
               </div>
 
-              {/* 하단 고정 버튼 */}
-              <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-stone-200 p-4 space-y-2">
-                {error && <p className="text-red-500 text-sm text-center">{error}</p>}
-                {!isBeforeDeadline() ? (
-                  <div className="w-full bg-stone-100 text-stone-400 font-bold py-4 rounded-2xl text-center text-sm">
-                    마감됨 ({store?.order_deadline?.slice(0, 5)} 이후 발주 불가)
-                  </div>
-                ) : (
-                  <>
-                    {items.length > 0 && (
-                      <p className="text-stone-400 text-xs text-center">
-                        {items.length}개 품목 · 총 {items.reduce((s, i) => s + i.quantity, 0)}개
-                      </p>
-                    )}
+              {/* 하단 고정 영역: 전송 버튼 + 네비 */}
+              <div className="fixed bottom-0 left-0 right-0 z-20">
+                <div className="bg-white border-t border-stone-200 px-4 pt-3 pb-2 space-y-2">
+                  {error && <p className="text-red-500 text-sm text-center">{error}</p>}
+                  {!isBeforeDeadline() ? (
+                    <div className="w-full bg-stone-100 text-stone-400 font-bold py-3.5 rounded-2xl text-center text-sm">
+                      마감됨 ({store?.order_deadline?.slice(0, 5)} 이후 발주 불가)
+                    </div>
+                  ) : (
+                    <>
+                      {items.length > 0 && (
+                        <p className="text-stone-400 text-xs text-center">
+                          {items.length}개 품목 · 총 {items.reduce((s, i) => s + i.quantity, 0)}개
+                        </p>
+                      )}
+                      <button
+                        onClick={handleSubmit}
+                        disabled={submitting}
+                        className="w-full bg-emerald-700 hover:bg-emerald-800 disabled:bg-stone-100 disabled:text-stone-400 text-white font-bold py-3.5 rounded-2xl transition-colors"
+                      >
+                        {submitting ? "전송 중..." : orderId ? "수정 저장" : "발주 전송"}
+                      </button>
+                    </>
+                  )}
+                </div>
+                {/* 네비게이션 바 */}
+                <div className="bg-white border-t border-stone-100 flex">
+                  {([["order", "발주 입력", "📋"], ["history", "오늘 내역", "📅"]] as ["order" | "history", string, string][]).map(([key, label, icon]) => (
                     <button
-                      onClick={handleSubmit}
-                      disabled={submitting}
-                      className="w-full bg-emerald-700 hover:bg-emerald-800 disabled:bg-stone-100 disabled:text-stone-400 text-white font-bold py-4 rounded-2xl transition-colors"
+                      key={key}
+                      onClick={() => setTab(key)}
+                      className={`flex-1 flex flex-col items-center py-2.5 gap-0.5 transition-colors ${
+                        tab === key ? "text-emerald-700" : "text-stone-400"
+                      }`}
                     >
-                      {submitting ? "전송 중..." : orderId ? "수정 저장" : "발주 전송"}
+                      <span className="text-lg leading-none">{icon}</span>
+                      <span className="text-[10px] font-medium">{label}</span>
                     </button>
-                  </>
-                )}
+                  ))}
+                </div>
               </div>
             </div>
           )}
@@ -352,7 +354,8 @@ export default function StorePage() {
 
       {/* ===== 오늘 내역 탭 ===== */}
       {tab === "history" && (
-        <div className="flex-1 px-4 pt-4 pb-6 space-y-3">
+        <>
+        <div className="flex-1 px-4 pt-4 pb-24 space-y-3">
           <div className="flex items-center justify-between mb-1">
             <p className="text-stone-500 text-xs font-semibold">오늘 발주 내역</p>
             <button onClick={loadHistory} className="text-emerald-700 text-xs font-medium">새로고침</button>
@@ -387,6 +390,22 @@ export default function StorePage() {
             ))
           )}
         </div>
+        {/* 오늘 내역 탭 하단 네비 */}
+        <div className="fixed bottom-0 left-0 right-0 z-20 bg-white border-t border-stone-100 flex">
+          {([["order", "발주 입력", "📋"], ["history", "오늘 내역", "📅"]] as ["order" | "history", string, string][]).map(([key, label, icon]) => (
+            <button
+              key={key}
+              onClick={() => setTab(key)}
+              className={`flex-1 flex flex-col items-center py-2.5 gap-0.5 transition-colors ${
+                tab === key ? "text-emerald-700" : "text-stone-400"
+              }`}
+            >
+              <span className="text-lg leading-none">{icon}</span>
+              <span className="text-[10px] font-medium">{label}</span>
+            </button>
+          ))}
+        </div>
+        </>
       )}
     </div>
   );
