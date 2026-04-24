@@ -126,7 +126,7 @@ export default function ProductionPage() {
     setCategoryGroups(groups);
 
     // 매장별 집계
-    const storeMap = new Map<string, Map<string, { set_qty: number; ppu: number }>>();
+    const storeMap = new Map<string, Map<string, { set_qty: number; ppu: number; category: string }>>();
     for (const item of data || []) {
       const order = item.orders as any;
       if (order.source !== "store") continue;
