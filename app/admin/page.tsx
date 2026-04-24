@@ -296,26 +296,39 @@ function ProductsTab() {
 
       {/* 상품 추가/수정 모달 */}
       {showForm && (
-        <div className="fixed inset-0 bg-black/30 z-50 flex items-end">
-          <div className="bg-white w-full rounded-t-2xl p-6 space-y-4 border-t border-stone-200">
-            <div className="flex items-center justify-between">
+        <div className="fixed inset-0 bg-black/40 z-50 flex items-end" onClick={() => setShowForm(false)}>
+          <div className="bg-white w-full rounded-t-2xl flex flex-col max-h-[85vh]" onClick={(e) => e.stopPropagation()}>
+            {/* 헤더 고정 */}
+            <div className="flex items-center justify-between px-6 pt-5 pb-3 border-b border-stone-100 flex-shrink-0">
               <h2 className="text-stone-900 font-bold text-base">{editTarget ? "상품 수정" : "상품 추가"}</h2>
-              <button onClick={() => setShowForm(false)} className="text-stone-400 text-lg leading-none">✕</button>
+              <button onClick={() => setShowForm(false)} className="text-stone-400 text-xl leading-none w-8 h-8 flex items-center justify-center">✕</button>
             </div>
-            <div className="space-y-3">
+
+            {/* 내용 스크롤 */}
+            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
               <div>
                 <label className="text-stone-500 text-xs font-medium mb-1 block">상품명</label>
                 <input type="text" placeholder="예: 쑥인절미 10구" value={form.name}
                   onChange={(e) => setForm({ ...form, name: e.target.value })}
                   className="w-full bg-stone-50 text-stone-900 placeholder-stone-300 rounded-lg px-4 py-3 text-sm outline-none border border-stone-200 focus:ring-2 focus:ring-emerald-500" />
               </div>
+
               <div>
-                <label className="text-stone-500 text-xs font-medium mb-1 block">카테고리</label>
-                <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}
-                  className="w-full bg-stone-50 text-stone-900 rounded-lg px-4 py-3 text-sm outline-none border border-stone-200 focus:ring-2 focus:ring-emerald-500">
-                  {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
-                </select>
+                <label className="text-stone-500 text-xs font-medium mb-2 block">카테고리</label>
+                <div className="flex flex-wrap gap-2">
+                  {CATEGORIES.map((c) => (
+                    <button key={c} type="button" onClick={() => setForm({ ...form, category: c })}
+                      className={`px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors ${
+                        form.category === c
+                          ? "bg-emerald-700 text-white border-emerald-700"
+                          : "bg-stone-50 text-stone-600 border-stone-200"
+                      }`}>
+                      {c}
+                    </button>
+                  ))}
+                </div>
               </div>
+
               <div>
                 <label className="text-stone-500 text-xs font-medium mb-1 block">세트당 개수</label>
                 <div className="flex items-center gap-3">
@@ -331,10 +344,14 @@ function ProductsTab() {
                 <p className="text-stone-300 text-xs text-center mt-1">예) 10구 세트 → 10 입력 · 발주 3세트 = 생산 30개</p>
               </div>
             </div>
-            <button onClick={save} disabled={saving || !form.name.trim()}
-              className="w-full bg-emerald-700 hover:bg-emerald-800 disabled:bg-stone-200 disabled:text-stone-400 text-white font-bold py-4 rounded-xl transition-colors">
-              {saving ? "저장 중..." : "저장"}
-            </button>
+
+            {/* 저장 버튼 고정 */}
+            <div className="px-6 pb-6 pt-3 border-t border-stone-100 flex-shrink-0">
+              <button onClick={save} disabled={saving || !form.name.trim()}
+                className="w-full bg-emerald-700 hover:bg-emerald-800 disabled:bg-stone-200 disabled:text-stone-400 text-white font-bold py-4 rounded-xl transition-colors">
+                {saving ? "저장 중..." : "저장"}
+              </button>
+            </div>
           </div>
         </div>
       )}
