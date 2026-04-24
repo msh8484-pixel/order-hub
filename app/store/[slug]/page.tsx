@@ -153,7 +153,7 @@ export default function StorePage() {
                   <span className="text-white text-sm flex-1">{product.name}</span>
                   <div className="flex items-center gap-3">
                     <button
-                      onClick={() => setQty(product.id, (quantities[product.id] || 0) - 10)}
+                      onClick={() => setQty(product.id, (quantities[product.id] || 0) - 1)}
                       className="w-8 h-8 rounded-full bg-gray-700 text-gray-300 font-bold text-lg flex items-center justify-center"
                     >
                       -
@@ -167,7 +167,7 @@ export default function StorePage() {
                       className="w-14 text-center bg-gray-700 text-white rounded-lg py-1 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
                     />
                     <button
-                      onClick={() => setQty(product.id, (quantities[product.id] || 0) + 10)}
+                      onClick={() => setQty(product.id, (quantities[product.id] || 0) + 1)}
                       className="w-8 h-8 rounded-full bg-gray-700 text-gray-300 font-bold text-lg flex items-center justify-center"
                     >
                       +
