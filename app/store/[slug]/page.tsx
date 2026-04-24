@@ -119,6 +119,15 @@ export default function StorePage() {
     .filter((p) => (quantities[p.id] || 0) > 0)
     .map((p) => ({ product_id: p.id, product_name: p.name, quantity: quantities[p.id] }));
 
+  function isBeforeDeadline(): boolean {
+    if (!store?.order_deadline) return true;
+    const now = new Date();
+    const [h, m] = store.order_deadline.slice(0, 5).split(":").map(Number);
+    const deadline = new Date();
+    deadline.setHours(h, m, 0, 0);
+    return now < deadline;
+  }
+
   async function handleSubmit() {
     if (!store) return;
     if (!senderName.trim()) { setError("이름을 입력해주세요"); return; }
@@ -129,14 +138,12 @@ export default function StorePage() {
 
     try {
       if (orderId) {
-        // 기존 발주 수정: items 삭제 후 재삽입
         await supabase.from("order_items").delete().eq("order_id", orderId);
         const { error: itemErr } = await supabase.from("order_items").insert(
           items.map((item) => ({ order_id: orderId, ...item, unit_price: 0 }))
         );
         if (itemErr) throw itemErr;
       } else {
-        // 신규 발주
         const { data: order, error: orderErr } = await supabase
           .from("orders")
           .insert({
@@ -167,15 +174,6 @@ export default function StorePage() {
     }
   }
 
-  function isBeforeDeadline(): boolean {
-    if (!store?.order_deadline) return true;
-    const now = new Date();
-    const [h, m] = store.order_deadline.slice(0, 5).split(":").map(Number);
-    const deadline = new Date();
-    deadline.setHours(h, m, 0, 0);
-    return now < deadline;
-  }
-
   function handleEdit() {
     setSubmitted(false);
   }
@@ -189,18 +187,33 @@ export default function StorePage() {
   }
 
   return (
-    <div className="min-h-screen bg-stone-50 flex flex-col">
+    <div className="min-h-screen bg-stone-50">
       {/* 헤더 */}
       <div className="sticky top-0 z-10 bg-white border-b border-stone-200 px-4 py-3">
         <h1 className="text-stone-900 font-bold text-base">{store?.name || "..."} 발주</h1>
         <p className="text-stone-400 text-xs">마감: {store?.order_deadline?.slice(0, 5) || "14:00"} 이전</p>
       </div>
 
+      {/* 상단 탭 */}
+      <div className="bg-white border-b border-stone-100 flex">
+        {([["order", "발주 입력"], ["history", "오늘 내역"]] as ["order" | "history", string][]).map(([key, label]) => (
+          <button
+            key={key}
+            onClick={() => setTab(key)}
+            className={`flex-1 text-sm font-medium py-2.5 border-b-2 transition-colors ${
+              tab === key ? "border-emerald-700 text-emerald-700" : "border-transparent text-stone-400"
+            }`}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
       {/* ===== 발주 입력 탭 ===== */}
       {tab === "order" && (
         <>
           {submitted ? (
-            <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
+            <div className="flex flex-col items-center justify-center p-6 text-center pt-16">
               <div className="text-5xl mb-4">✅</div>
               <h2 className="text-xl font-bold text-stone-900 mb-2">
                 {orderId ? "발주 수정 완료!" : "발주 완료!"}
@@ -228,23 +241,20 @@ export default function StorePage() {
                     마감됨 — 수정 불가 ({store?.order_deadline?.slice(0, 5)} 이후)
                   </div>
                 )}
-                <button
-                  onClick={handleReset}
-                  className="text-stone-400 text-sm py-2"
-                >
+                <button onClick={handleReset} className="text-stone-400 text-sm py-2">
                   새로 입력하기
                 </button>
               </div>
             </div>
           ) : (
-            <div className="flex-1 pb-44">
+            /* pb-36: 발주 전송 버튼(~60px) + 글로벌 네비(64px) 여유 */
+            <div className="pb-36">
               {orderId && (
                 <div className="mx-4 mt-3 px-3 py-2 bg-amber-50 border border-amber-200 rounded-xl text-amber-700 text-xs font-medium">
                   수정 모드 — 저장하면 기존 발주가 교체됩니다
                 </div>
               )}
 
-              {/* 이름 입력 */}
               <div className="px-4 pt-4 pb-2">
                 <input
                   type="text"
@@ -255,7 +265,6 @@ export default function StorePage() {
                 />
               </div>
 
-              {/* 상품 목록 */}
               <div className="px-4 space-y-6 pt-2">
                 {Object.entries(grouped).map(([category, catItems]) => (
                   <div key={category}>
@@ -306,46 +315,29 @@ export default function StorePage() {
                 ))}
               </div>
 
-              {/* 하단 고정 영역: 전송 버튼 + 네비 */}
-              <div className="fixed bottom-0 left-0 right-0 z-20">
-                <div className="bg-white border-t border-stone-200 px-4 pt-3 pb-2 space-y-2">
-                  {error && <p className="text-red-500 text-sm text-center">{error}</p>}
-                  {!isBeforeDeadline() ? (
-                    <div className="w-full bg-stone-100 text-stone-400 font-bold py-3.5 rounded-2xl text-center text-sm">
-                      마감됨 ({store?.order_deadline?.slice(0, 5)} 이후 발주 불가)
-                    </div>
-                  ) : (
-                    <>
-                      {items.length > 0 && (
-                        <p className="text-stone-400 text-xs text-center">
-                          {items.length}개 품목 · 총 {items.reduce((s, i) => s + i.quantity, 0)}개
-                        </p>
-                      )}
-                      <button
-                        onClick={handleSubmit}
-                        disabled={submitting}
-                        className="w-full bg-emerald-700 hover:bg-emerald-800 disabled:bg-stone-100 disabled:text-stone-400 text-white font-bold py-3.5 rounded-2xl transition-colors"
-                      >
-                        {submitting ? "전송 중..." : orderId ? "수정 저장" : "발주 전송"}
-                      </button>
-                    </>
-                  )}
-                </div>
-                {/* 네비게이션 바 */}
-                <div className="bg-white border-t border-stone-100 flex">
-                  {([["order", "발주 입력", "📋"], ["history", "오늘 내역", "📅"]] as ["order" | "history", string, string][]).map(([key, label, icon]) => (
+              {/* 발주 전송 버튼 — 글로벌 네비(bottom-0~16) 바로 위 */}
+              <div className="fixed bottom-16 left-0 right-0 z-40 bg-white border-t border-stone-200 px-4 pt-3 pb-2 space-y-2">
+                {error && <p className="text-red-500 text-sm text-center">{error}</p>}
+                {!isBeforeDeadline() ? (
+                  <div className="w-full bg-stone-100 text-stone-400 font-bold py-3.5 rounded-2xl text-center text-sm">
+                    마감됨 ({store?.order_deadline?.slice(0, 5)} 이후 발주 불가)
+                  </div>
+                ) : (
+                  <>
+                    {items.length > 0 && (
+                      <p className="text-stone-400 text-xs text-center">
+                        {items.length}개 품목 · 총 {items.reduce((s, i) => s + i.quantity, 0)}개
+                      </p>
+                    )}
                     <button
-                      key={key}
-                      onClick={() => setTab(key)}
-                      className={`flex-1 flex flex-col items-center py-2.5 gap-0.5 transition-colors ${
-                        tab === key ? "text-emerald-700" : "text-stone-400"
-                      }`}
+                      onClick={handleSubmit}
+                      disabled={submitting}
+                      className="w-full bg-emerald-700 hover:bg-emerald-800 disabled:bg-stone-100 disabled:text-stone-400 text-white font-bold py-3.5 rounded-2xl transition-colors"
                     >
-                      <span className="text-lg leading-none">{icon}</span>
-                      <span className="text-[10px] font-medium">{label}</span>
+                      {submitting ? "전송 중..." : orderId ? "수정 저장" : "발주 전송"}
                     </button>
-                  ))}
-                </div>
+                  </>
+                )}
               </div>
             </div>
           )}
@@ -354,8 +346,7 @@ export default function StorePage() {
 
       {/* ===== 오늘 내역 탭 ===== */}
       {tab === "history" && (
-        <>
-        <div className="flex-1 px-4 pt-4 pb-24 space-y-3">
+        <div className="px-4 pt-4 pb-20 space-y-3">
           <div className="flex items-center justify-between mb-1">
             <p className="text-stone-500 text-xs font-semibold">오늘 발주 내역</p>
             <button onClick={loadHistory} className="text-emerald-700 text-xs font-medium">새로고침</button>
@@ -390,22 +381,6 @@ export default function StorePage() {
             ))
           )}
         </div>
-        {/* 오늘 내역 탭 하단 네비 */}
-        <div className="fixed bottom-0 left-0 right-0 z-20 bg-white border-t border-stone-100 flex">
-          {([["order", "발주 입력", "📋"], ["history", "오늘 내역", "📅"]] as ["order" | "history", string, string][]).map(([key, label, icon]) => (
-            <button
-              key={key}
-              onClick={() => setTab(key)}
-              className={`flex-1 flex flex-col items-center py-2.5 gap-0.5 transition-colors ${
-                tab === key ? "text-emerald-700" : "text-stone-400"
-              }`}
-            >
-              <span className="text-lg leading-none">{icon}</span>
-              <span className="text-[10px] font-medium">{label}</span>
-            </button>
-          ))}
-        </div>
-        </>
       )}
     </div>
   );
