@@ -91,7 +91,7 @@ export default function AdminProductsPage() {
 
   return (
     <div className="min-h-screen bg-stone-50 pb-20">
-      <div className="sticky top-0 md:top-16 z-10 bg-white border-b border-stone-200 px-4 py-3 flex items-center justify-between">
+      <div className="sticky top-0 z-10 bg-white border-b border-stone-200 px-4 py-3 flex items-center justify-between">
         <div>
           <h1 className="text-stone-900 font-bold text-base">메뉴 관리</h1>
           <p className="text-stone-400 text-xs">총 {products.length}개 상품</p>

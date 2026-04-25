@@ -32,7 +32,7 @@ export default function AdminPage() {
   return (
     <div className="min-h-screen bg-stone-50 pb-20">
       {/* 헤더 */}
-      <div className="sticky top-0 md:top-16 z-10 bg-white border-b border-stone-200 px-4 py-3">
+      <div className="sticky top-0 z-10 bg-white border-b border-stone-200 px-4 py-3">
         <h1 className="text-stone-900 font-bold text-base">설정</h1>
       </div>
 

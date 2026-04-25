@@ -146,7 +146,7 @@ export default function ChatRoomPage() {
   return (
     <div className="min-h-screen bg-gray-950 flex flex-col">
       {/* 헤더 */}
-      <div className="sticky top-0 md:top-16 z-10 bg-gray-900 border-b border-gray-800 px-4 py-3 flex items-center gap-3">
+      <div className="sticky top-0 z-10 bg-gray-900 border-b border-gray-800 px-4 py-3 flex items-center gap-3">
         <button onClick={() => router.back()} className="text-gray-400">
           ←
         </button>
