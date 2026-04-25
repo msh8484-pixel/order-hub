@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import StatsTab from "./StatsTab";
+import ProfitTab from "./ProfitTab";
 
 type OrderItem = {
   product_name: string;
@@ -71,7 +72,7 @@ function buildCalendar(year: number, month: number) {
 }
 
 export default function DashboardPage() {
-  const [mainTab, setMainTab] = useState<"orders" | "stats">("orders");
+  const [mainTab, setMainTab] = useState<"orders" | "stats" | "profit">("orders");
 
   // --- 발주 현황 state ---
   const [orders, setOrders] = useState<StoreOrder[]>([]);
@@ -197,6 +198,9 @@ export default function DashboardPage() {
             {mainTab === "stats" && (
               <p className="text-stone-400 text-xs mt-0.5">통계 분석</p>
             )}
+            {mainTab === "profit" && (
+              <p className="text-stone-400 text-xs mt-0.5">수익성 분석</p>
+            )}
           </div>
           <button
             onClick={() => load()}
@@ -208,7 +212,7 @@ export default function DashboardPage() {
 
         {/* 메인 탭 */}
         <div className="flex gap-1 mx-4 mb-2 bg-stone-100 rounded-lg p-1">
-          {([["orders", "발주 현황"], ["stats", "통계 분석"]] as ["orders" | "stats", string][]).map(([key, label]) => (
+          {([["orders", "발주 현황"], ["stats", "통계 분석"], ["profit", "수익성 분석"]] as ["orders" | "stats" | "profit", string][]).map(([key, label]) => (
             <button
               key={key}
               onClick={() => setMainTab(key)}
@@ -220,7 +224,7 @@ export default function DashboardPage() {
         </div>
 
         {/* 날짜 스트립 — 발주 현황 탭만 */}
-        {mainTab === "orders" && (
+        {(mainTab === "orders") && (
           <>
             <div ref={stripRef} className="flex gap-1 overflow-x-auto px-3 pb-3" style={{ scrollbarWidth: "none" }}>
               {stripDays.map(({ dateStr, day, weekday, isToday, dow }) => {
@@ -400,6 +404,9 @@ export default function DashboardPage() {
 
       {/* ===================== 통계 분석 탭 ===================== */}
       {mainTab === "stats" && <StatsTab />}
+
+      {/* ===================== 수익성 분석 탭 ===================== */}
+      {mainTab === "profit" && <ProfitTab />}
     </div>
   );
 }
