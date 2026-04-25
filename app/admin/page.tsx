@@ -22,12 +22,41 @@ type Product = {
   pieces_per_unit: number;
 };
 
+type MaterialRow = {
+  name: string;
+  unit: string;        // g / kg / 개
+  unit_price: number;  // 원/단위
+  amount: number;      // 소요량(단위/개당)
+};
+
+type ProductCost = {
+  product_id: string;
+  materials: MaterialRow[];
+  packaging_cost: number;
+  labor_cost: number;
+  overhead_cost: number;
+  selling_price: number;
+  monthly_fixed_cost: number;
+};
+
 const EMPTY_STORE: Omit<Store, "id"> = { name: "", slug: "", order_deadline: "14:00", contact_name: "" };
 const CATEGORIES = ["쑥인절미", "약밥", "무설탕", "개떡", "찹쌀떡", "찰떡", "설기", "현미", "음료", "답례떡", "기타"];
+const MATERIAL_UNITS = ["g", "kg", "개", "ml", "L"];
+
+const EMPTY_MATERIAL: MaterialRow = { name: "", unit: "g", unit_price: 0, amount: 0 };
+const EMPTY_COST = (product_id: string): ProductCost => ({
+  product_id,
+  materials: [{ ...EMPTY_MATERIAL }],
+  packaging_cost: 0,
+  labor_cost: 0,
+  overhead_cost: 0,
+  selling_price: 0,
+  monthly_fixed_cost: 0,
+});
 
 // ─── Main ─────────────────────────────────────────────────────────────
 export default function AdminPage() {
-  const [tab, setTab] = useState<"stores" | "products">("stores");
+  const [tab, setTab] = useState<"stores" | "products" | "costs">("stores");
 
   return (
     <div className="min-h-screen bg-stone-50 pb-20">
@@ -38,7 +67,13 @@ export default function AdminPage() {
 
       {/* 탭 */}
       <div className="bg-white border-b border-stone-100 flex">
-        {([["stores", "매장 설정"], ["products", "상품 관리"]] as ["stores" | "products", string][]).map(([key, label]) => (
+        {(
+          [
+            ["stores", "매장 설정"],
+            ["products", "상품 관리"],
+            ["costs", "원가 설정"],
+          ] as ["stores" | "products" | "costs", string][]
+        ).map(([key, label]) => (
           <button
             key={key}
             onClick={() => setTab(key)}
@@ -51,7 +86,9 @@ export default function AdminPage() {
         ))}
       </div>
 
-      {tab === "stores" ? <StoresTab /> : <ProductsTab />}
+      {tab === "stores" && <StoresTab />}
+      {tab === "products" && <ProductsTab />}
+      {tab === "costs" && <CostsTab />}
     </div>
   );
 }
@@ -229,7 +266,6 @@ function ProductsTab() {
   function openEdit(p: Product) {
     setEditTarget(p);
     setForm({ name: p.name, category: p.category, unit: p.unit, pieces_per_unit: p.pieces_per_unit ?? 1 });
-    // 기존 상품 카테고리가 목록에 없으면 커스텀에 추가
     if (!allCategories.includes(p.category)) {
       setCustomCategories(prev => [...prev, p.category]);
     }
@@ -395,6 +431,429 @@ function ProductsTab() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── 원가 설정 탭 ─────────────────────────────────────────────────────
+function CostsTab() {
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
+  const [cost, setCost] = useState<ProductCost | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  const loadProducts = useCallback(async () => {
+    const { data } = await supabase
+      .from("products")
+      .select("*")
+      .eq("is_active", true)
+      .order("category")
+      .order("name");
+    setProducts(data || []);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { loadProducts(); }, [loadProducts]);
+
+  function flash(m: string) { setMsg(m); setTimeout(() => setMsg(""), 2500); }
+
+  async function openCost(product: Product) {
+    setSelectedProduct(product);
+    const { data } = await supabase
+      .from("product_costs")
+      .select("*")
+      .eq("product_id", product.id)
+      .single();
+
+    if (data) {
+      setCost({
+        product_id: product.id,
+        materials: Array.isArray(data.materials) && data.materials.length > 0
+          ? data.materials
+          : [{ ...EMPTY_MATERIAL }],
+        packaging_cost: data.packaging_cost ?? 0,
+        labor_cost: data.labor_cost ?? 0,
+        overhead_cost: data.overhead_cost ?? 0,
+        selling_price: data.selling_price ?? 0,
+        monthly_fixed_cost: data.monthly_fixed_cost ?? 0,
+      });
+    } else {
+      setCost(EMPTY_COST(product.id));
+    }
+  }
+
+  function closeCost() {
+    setSelectedProduct(null);
+    setCost(null);
+  }
+
+  // 재료 행 업데이트
+  function updateMaterial(index: number, field: keyof MaterialRow, value: string | number) {
+    if (!cost) return;
+    const updated = cost.materials.map((m, i) =>
+      i === index ? { ...m, [field]: value } : m
+    );
+    setCost({ ...cost, materials: updated });
+  }
+
+  function addMaterial() {
+    if (!cost) return;
+    setCost({ ...cost, materials: [...cost.materials, { ...EMPTY_MATERIAL }] });
+  }
+
+  function removeMaterial(index: number) {
+    if (!cost || cost.materials.length <= 1) return;
+    setCost({ ...cost, materials: cost.materials.filter((_, i) => i !== index) });
+  }
+
+  // 계산
+  function calcMaterialCost(m: MaterialRow): number {
+    return m.unit_price * m.amount;
+  }
+
+  function calcTotalMaterialCost(): number {
+    if (!cost) return 0;
+    return cost.materials.reduce((sum, m) => sum + calcMaterialCost(m), 0);
+  }
+
+  function calcTotalCost(): number {
+    if (!cost) return 0;
+    return calcTotalMaterialCost() + cost.packaging_cost + cost.labor_cost + cost.overhead_cost;
+  }
+
+  function calcMargin(): number {
+    if (!cost) return 0;
+    return cost.selling_price - calcTotalCost();
+  }
+
+  function calcMarginRate(): number {
+    if (!cost || cost.selling_price === 0) return 0;
+    return (calcMargin() / cost.selling_price) * 100;
+  }
+
+  function calcBEP(): number | null {
+    if (!cost || cost.monthly_fixed_cost === 0) return null;
+    const margin = calcMargin();
+    if (margin <= 0) return null;
+    return Math.ceil(cost.monthly_fixed_cost / margin);
+  }
+
+  async function saveCost() {
+    if (!cost) return;
+    setSaving(true);
+    const { error } = await supabase.from("product_costs").upsert(
+      {
+        product_id: cost.product_id,
+        materials: cost.materials,
+        packaging_cost: cost.packaging_cost,
+        labor_cost: cost.labor_cost,
+        overhead_cost: cost.overhead_cost,
+        selling_price: cost.selling_price,
+        monthly_fixed_cost: cost.monthly_fixed_cost,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "product_id" }
+    );
+    setSaving(false);
+    if (error) {
+      flash("저장 실패: " + error.message);
+    } else {
+      flash("저장됐습니다");
+    }
+  }
+
+  const totalMat = calcTotalMaterialCost();
+  const totalCost = calcTotalCost();
+  const margin = calcMargin();
+  const marginRate = calcMarginRate();
+  const bep = calcBEP();
+
+  // ── 상품 목록 화면 ──
+  if (!selectedProduct || !cost) {
+    return (
+      <div className="px-4 pt-4 space-y-3">
+        {msg && (
+          <div className="px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-700 text-sm text-center font-medium">
+            {msg}
+          </div>
+        )}
+        <p className="text-stone-500 text-xs font-semibold">활성 상품 — 클릭하면 원가 입력</p>
+        {loading ? (
+          <div className="text-center text-stone-400 py-16 text-sm">불러오는 중...</div>
+        ) : products.length === 0 ? (
+          <div className="text-center text-stone-300 py-16 text-sm">활성 상품이 없습니다</div>
+        ) : (
+          <div className="bg-white rounded-xl border border-stone-200 overflow-hidden">
+            {products.map((p, i) => (
+              <button
+                key={p.id}
+                onClick={() => openCost(p)}
+                className={`w-full text-left px-4 py-3 flex items-center justify-between gap-3 hover:bg-stone-50 transition-colors ${
+                  i > 0 ? "border-t border-stone-100" : ""
+                }`}
+              >
+                <div>
+                  <p className="text-stone-900 text-sm font-medium">{p.name}</p>
+                  <p className="text-stone-400 text-xs mt-0.5">{p.category}</p>
+                </div>
+                <span className="text-stone-300 text-base">›</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // ── 원가 입력 폼 화면 ──
+  return (
+    <div className="pb-32">
+      {/* 서브 헤더 */}
+      <div className="px-4 pt-4 pb-3 flex items-center gap-3 border-b border-stone-100 bg-white sticky top-[101px] z-[5]">
+        <button onClick={closeCost} className="text-stone-400 text-sm px-2 py-1 rounded-lg bg-stone-100">← 목록</button>
+        <div className="flex-1 min-w-0">
+          <p className="text-stone-900 font-bold text-sm truncate">{selectedProduct.name}</p>
+          <p className="text-stone-400 text-xs">{selectedProduct.category}</p>
+        </div>
+      </div>
+
+      {msg && (
+        <div className="mx-4 mt-3 px-3 py-2 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-700 text-sm text-center font-medium">
+          {msg}
+        </div>
+      )}
+
+      <div className="px-4 pt-4 space-y-5">
+
+        {/* ── 재료비 섹션 ── */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-stone-700 text-sm font-bold">재료비</p>
+            <button
+              onClick={addMaterial}
+              className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-lg font-medium"
+            >
+              + 재료 추가
+            </button>
+          </div>
+
+          <div className="space-y-2">
+            {/* 컬럼 헤더 */}
+            <div className="grid grid-cols-[1fr_52px_72px_72px_32px] gap-1 px-1">
+              <p className="text-stone-400 text-[10px] font-medium">재료명</p>
+              <p className="text-stone-400 text-[10px] font-medium text-center">단위</p>
+              <p className="text-stone-400 text-[10px] font-medium text-right">단가(원)</p>
+              <p className="text-stone-400 text-[10px] font-medium text-right">소요량</p>
+              <p className="text-stone-400 text-[10px] font-medium text-center">-</p>
+            </div>
+
+            {cost.materials.map((m, i) => (
+              <div key={i} className="bg-white rounded-xl border border-stone-200 p-2.5 space-y-2">
+                <div className="grid grid-cols-[1fr_52px_72px_72px_32px] gap-1 items-center">
+                  {/* 재료명 */}
+                  <input
+                    type="text"
+                    value={m.name}
+                    onChange={(e) => updateMaterial(i, "name", e.target.value)}
+                    placeholder="예: 쑥가루"
+                    className="bg-stone-50 border border-stone-200 rounded-lg px-2 py-1.5 text-xs text-stone-900 placeholder-stone-300 outline-none focus:ring-1 focus:ring-emerald-500"
+                  />
+                  {/* 단위 */}
+                  <select
+                    value={m.unit}
+                    onChange={(e) => updateMaterial(i, "unit", e.target.value)}
+                    className="bg-stone-50 border border-stone-200 rounded-lg px-1 py-1.5 text-xs text-stone-900 outline-none focus:ring-1 focus:ring-emerald-500 text-center"
+                  >
+                    {MATERIAL_UNITS.map((u) => (
+                      <option key={u} value={u}>{u}</option>
+                    ))}
+                  </select>
+                  {/* 단가 */}
+                  <input
+                    type="number"
+                    min={0}
+                    value={m.unit_price === 0 ? "" : m.unit_price}
+                    onChange={(e) => updateMaterial(i, "unit_price", parseFloat(e.target.value) || 0)}
+                    placeholder="0"
+                    className="bg-stone-50 border border-stone-200 rounded-lg px-2 py-1.5 text-xs text-stone-900 text-right font-mono outline-none focus:ring-1 focus:ring-emerald-500"
+                  />
+                  {/* 소요량 */}
+                  <input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={m.amount === 0 ? "" : m.amount}
+                    onChange={(e) => updateMaterial(i, "amount", parseFloat(e.target.value) || 0)}
+                    placeholder="0"
+                    className="bg-stone-50 border border-stone-200 rounded-lg px-2 py-1.5 text-xs text-stone-900 text-right font-mono outline-none focus:ring-1 focus:ring-emerald-500"
+                  />
+                  {/* 삭제 */}
+                  <button
+                    onClick={() => removeMaterial(i)}
+                    disabled={cost.materials.length <= 1}
+                    className="w-7 h-7 flex items-center justify-center rounded-lg bg-red-50 text-red-400 border border-red-100 disabled:opacity-30 text-xs"
+                  >
+                    ✕
+                  </button>
+                </div>
+                {/* 재료별 소계 */}
+                {(m.unit_price > 0 || m.amount > 0) && (
+                  <div className="flex justify-end">
+                    <span className="text-stone-400 text-[10px] font-mono">
+                      {m.unit_price.toLocaleString()} × {m.amount} {m.unit} = {" "}
+                      <span className="text-stone-700 font-semibold">{calcMaterialCost(m).toLocaleString()}원</span>
+                    </span>
+                  </div>
+                )}
+              </div>
+            ))}
+
+            {/* 재료비 소계 */}
+            <div className="flex justify-end items-center gap-2 px-1 pt-1">
+              <p className="text-stone-400 text-xs">재료비 소계</p>
+              <p className="text-stone-800 text-sm font-bold font-mono">{totalMat.toLocaleString()}원</p>
+            </div>
+          </div>
+        </div>
+
+        {/* ── 기타 비용 섹션 ── */}
+        <div className="bg-white rounded-2xl border border-stone-200 p-4 space-y-3">
+          <p className="text-stone-700 text-sm font-bold mb-1">기타 비용 (원/개)</p>
+
+          {[
+            { label: "포장비", sublabel: "상자·포장지·리본 등", key: "packaging_cost" as const },
+            { label: "직접 노무비", sublabel: "제조 인건비", key: "labor_cost" as const },
+            { label: "제조 간접비", sublabel: "수도광열비·감가상각 등", key: "overhead_cost" as const },
+          ].map(({ label, sublabel, key }) => (
+            <div key={key} className="flex items-center gap-3">
+              <div className="flex-1 min-w-0">
+                <p className="text-stone-700 text-xs font-medium">{label}</p>
+                <p className="text-stone-400 text-[10px]">{sublabel}</p>
+              </div>
+              <div className="relative">
+                <input
+                  type="number"
+                  min={0}
+                  value={cost[key] === 0 ? "" : cost[key]}
+                  onChange={(e) => setCost({ ...cost, [key]: parseFloat(e.target.value) || 0 })}
+                  placeholder="0"
+                  className="w-28 bg-stone-50 border border-stone-200 rounded-lg px-3 py-2 text-sm text-stone-900 text-right font-mono outline-none focus:ring-2 focus:ring-emerald-500 pr-8"
+                />
+                <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400 text-xs pointer-events-none">원</span>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* ── 판매가 + 월 고정비 ── */}
+        <div className="bg-white rounded-2xl border border-stone-200 p-4 space-y-3">
+          <p className="text-stone-700 text-sm font-bold mb-1">판매가 / 고정비</p>
+
+          <div className="flex items-center gap-3">
+            <div className="flex-1 min-w-0">
+              <p className="text-stone-700 text-xs font-medium">판매가</p>
+              <p className="text-stone-400 text-[10px]">개당 소비자 가격</p>
+            </div>
+            <div className="relative">
+              <input
+                type="number"
+                min={0}
+                value={cost.selling_price === 0 ? "" : cost.selling_price}
+                onChange={(e) => setCost({ ...cost, selling_price: parseFloat(e.target.value) || 0 })}
+                placeholder="0"
+                className="w-28 bg-stone-50 border border-stone-200 rounded-lg px-3 py-2 text-sm text-stone-900 text-right font-mono outline-none focus:ring-2 focus:ring-emerald-500 pr-8"
+              />
+              <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400 text-xs pointer-events-none">원</span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <div className="flex-1 min-w-0">
+              <p className="text-stone-700 text-xs font-medium">월 고정비 <span className="text-stone-300 font-normal">(선택)</span></p>
+              <p className="text-stone-400 text-[10px]">임대료·관리비 등 월 총액</p>
+            </div>
+            <div className="relative">
+              <input
+                type="number"
+                min={0}
+                value={cost.monthly_fixed_cost === 0 ? "" : cost.monthly_fixed_cost}
+                onChange={(e) => setCost({ ...cost, monthly_fixed_cost: parseFloat(e.target.value) || 0 })}
+                placeholder="0"
+                className="w-28 bg-stone-50 border border-stone-200 rounded-lg px-3 py-2 text-sm text-stone-900 text-right font-mono outline-none focus:ring-2 focus:ring-emerald-500 pr-8"
+              />
+              <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400 text-xs pointer-events-none">원</span>
+            </div>
+          </div>
+        </div>
+
+        {/* ── 계산 결과 ── */}
+        <div className="bg-stone-50 rounded-xl p-4 space-y-3">
+          <p className="text-stone-500 text-xs font-bold tracking-wider">자동 계산 결과</p>
+
+          <div className="space-y-2">
+            {[
+              { label: "재료비", value: totalMat, color: "text-stone-700" },
+              { label: "포장비", value: cost.packaging_cost, color: "text-stone-700" },
+              { label: "직접 노무비", value: cost.labor_cost, color: "text-stone-700" },
+              { label: "제조 간접비", value: cost.overhead_cost, color: "text-stone-700" },
+            ].map(({ label, value, color }) => (
+              <div key={label} className="flex justify-between items-center">
+                <p className="text-stone-500 text-xs">{label}</p>
+                <p className={`text-xs font-mono font-medium ${color}`}>{value.toLocaleString()}원</p>
+              </div>
+            ))}
+
+            <div className="border-t border-stone-200 pt-2 flex justify-between items-center">
+              <p className="text-stone-700 text-sm font-bold">총 원가</p>
+              <p className="text-stone-900 text-sm font-bold font-mono">{totalCost.toLocaleString()}원</p>
+            </div>
+
+            {cost.selling_price > 0 && (
+              <>
+                <div className="flex justify-between items-center">
+                  <p className="text-stone-500 text-xs">판매가</p>
+                  <p className="text-stone-700 text-xs font-mono">{cost.selling_price.toLocaleString()}원</p>
+                </div>
+                <div className="flex justify-between items-center">
+                  <p className="text-stone-500 text-xs">마진</p>
+                  <p className={`text-xs font-mono font-semibold ${margin >= 0 ? "text-emerald-700" : "text-red-600"}`}>
+                    {margin >= 0 ? "+" : ""}{margin.toLocaleString()}원
+                  </p>
+                </div>
+                <div className="bg-white rounded-lg px-3 py-2 flex justify-between items-center border border-stone-200">
+                  <p className="text-stone-700 text-sm font-bold">마진율</p>
+                  <p className={`text-base font-bold font-mono ${marginRate >= 30 ? "text-emerald-700" : marginRate >= 15 ? "text-amber-600" : "text-red-600"}`}>
+                    {marginRate.toFixed(1)}%
+                  </p>
+                </div>
+              </>
+            )}
+
+            {bep !== null && (
+              <div className="bg-white rounded-lg px-3 py-2 flex justify-between items-center border border-stone-200">
+                <div>
+                  <p className="text-stone-700 text-sm font-bold">손익분기 수량</p>
+                  <p className="text-stone-400 text-[10px]">월 고정비 기준</p>
+                </div>
+                <p className="text-stone-900 text-base font-bold font-mono">{bep.toLocaleString()}개/월</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* 저장 버튼 (fixed) */}
+      <div className="fixed bottom-0 left-0 right-0 px-4 pb-8 pt-3 bg-white border-t border-stone-100 z-10">
+        <button
+          onClick={saveCost}
+          disabled={saving}
+          className="w-full bg-emerald-700 hover:bg-emerald-800 disabled:bg-stone-200 disabled:text-stone-400 text-white font-bold py-4 rounded-xl transition-colors"
+        >
+          {saving ? "저장 중..." : "원가 저장"}
+        </button>
+      </div>
     </div>
   );
 }
