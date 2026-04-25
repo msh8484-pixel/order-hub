@@ -18,6 +18,7 @@ type StoreOrderStatus = {
   hasOrdered: boolean;
   orderedAt: string | null;
   deadline: string | null;
+  timeLeftMinutes: number | null; // null = 마감 없음, -1 = 마감 지남, 0+ = 남은 분
 };
 
 function calcTimeLeft(deadlineHHMM: string, nowKST: Date): string {
@@ -31,6 +32,15 @@ function calcTimeLeft(deadlineHHMM: string, nowKST: Date): string {
   const mins = diffMin % 60;
   if (hours > 0) return `${hours}시간 ${mins}분 전`;
   return `${mins}분 전`;
+}
+
+function calcTimeLeftMinutes(deadlineHHMM: string, nowKST: Date): number {
+  const [h, m] = deadlineHHMM.split(":").map(Number);
+  const deadline = new Date(nowKST);
+  deadline.setHours(h, m, 0, 0);
+  const diffMs = deadline.getTime() - nowKST.getTime();
+  if (diffMs <= 0) return -1;
+  return Math.floor(diffMs / 60000);
 }
 
 async function getHomeData() {
@@ -67,6 +77,7 @@ async function getHomeData() {
 
   const storeOrderStatus: StoreOrderStatus[] = (stores || []).map((store) => {
     const orderedAt = latestOrderByStore.get(store.id) ?? null;
+    const deadline = store.order_deadline ?? null;
     return {
       id: store.id,
       name: store.name,
@@ -75,7 +86,8 @@ async function getHomeData() {
       orderedAt: orderedAt
         ? new Date(orderedAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Seoul" })
         : null,
-      deadline: store.order_deadline ?? null,
+      deadline,
+      timeLeftMinutes: deadline ? calcTimeLeftMinutes(deadline, nowKST) : null,
     };
   });
 
@@ -136,46 +148,74 @@ export default async function Home() {
         </section>
 
         {/* ─── 오늘 발주 현황 ─────────────────────────── */}
-        {storeOrderStatus.length > 0 && (
-          <section>
-            <p className="text-stone-400 text-xs font-semibold uppercase tracking-wider mb-3">오늘 발주 현황</p>
-            <div className="bg-white rounded-2xl border border-stone-200 divide-y divide-stone-100">
-              {storeOrderStatus.map((s) => {
-                const timeLeft = s.deadline ? calcTimeLeft(s.deadline, nowKST) : null;
-                const isPast = timeLeft === "마감";
-                return (
-                  <div key={s.id} className="flex items-center justify-between px-4 py-3 gap-3">
-                    <div className="flex items-center gap-3 min-w-0">
-                      {s.hasOrdered ? (
-                        <span className="shrink-0 inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 text-xs font-semibold px-2.5 py-1 rounded-full">
-                          ✅ 완료
-                        </span>
-                      ) : (
-                        <span className="shrink-0 inline-flex items-center gap-1 bg-red-50 text-red-700 text-xs font-semibold px-2.5 py-1 rounded-full">
-                          ❌ 미발주
-                        </span>
-                      )}
-                      <span className="text-stone-800 text-sm font-semibold truncate">{s.name}</span>
-                      {s.hasOrdered && s.orderedAt && (
-                        <span className="text-stone-400 text-xs">{s.orderedAt} 입력</span>
-                      )}
-                    </div>
-                    {s.deadline && (
-                      <div className="shrink-0 text-right">
-                        <span className="text-stone-500 text-xs">마감 {s.deadline}</span>
-                        {timeLeft && (
-                          <span className={`ml-2 text-xs font-semibold ${isPast ? "text-stone-400" : "text-amber-600"}`}>
-                            ({timeLeft})
+        {storeOrderStatus.length > 0 && (() => {
+          const notOrderedCount = storeOrderStatus.filter((s) => !s.hasOrdered).length;
+          const headerSuffix = notOrderedCount === 0
+            ? "전체 완료 ✅"
+            : `미발주 ${notOrderedCount}곳`;
+          return (
+            <section>
+              <p className="text-stone-400 text-xs font-semibold uppercase tracking-wider mb-3">
+                오늘 발주 현황 · <span className={notOrderedCount === 0 ? "text-emerald-600" : "text-red-500"}>{headerSuffix}</span>
+              </p>
+              <div className="bg-white rounded-2xl border border-stone-200 divide-y divide-stone-100 overflow-hidden">
+                {storeOrderStatus.map((s) => {
+                  const timeLeft = s.deadline ? calcTimeLeft(s.deadline, nowKST) : null;
+                  const isPast = s.timeLeftMinutes === -1;
+                  const isUrgent = !s.hasOrdered && s.timeLeftMinutes !== null && s.timeLeftMinutes >= 0 && s.timeLeftMinutes <= 30;
+                  const isOverdue = !s.hasOrdered && isPast;
+
+                  // 행 배경 및 왼쪽 세로선
+                  const rowBg = isUrgent
+                    ? "bg-red-50 border-l-4 border-red-400"
+                    : isOverdue
+                    ? "bg-stone-100"
+                    : "";
+
+                  return (
+                    <div key={s.id} className={`flex items-center justify-between px-4 py-3 gap-3 ${rowBg}`}>
+                      <div className="flex items-center gap-3 min-w-0">
+                        {s.hasOrdered ? (
+                          <span className="shrink-0 inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 text-xs font-semibold px-2.5 py-1 rounded-full">
+                            ✅ 완료
+                          </span>
+                        ) : isOverdue ? (
+                          <span className="shrink-0 inline-flex items-center gap-1 bg-stone-200 text-stone-500 text-xs font-semibold px-2.5 py-1 rounded-full">
+                            ❌ 마감(미발주)
+                          </span>
+                        ) : (
+                          <span className={`shrink-0 inline-flex items-center gap-1 bg-red-50 text-red-700 text-xs font-semibold px-2.5 py-1 rounded-full ${isUrgent ? "animate-pulse" : ""}`}>
+                            ❌ 미발주
                           </span>
                         )}
+                        <span className="text-stone-800 text-sm font-semibold truncate">{s.name}</span>
+                        {s.hasOrdered && s.orderedAt && (
+                          <span className="text-stone-400 text-xs">{s.orderedAt} 입력</span>
+                        )}
                       </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </section>
-        )}
+                      {s.deadline && (
+                        <div className="shrink-0 text-right">
+                          <span className="text-stone-500 text-xs">마감 {s.deadline}</span>
+                          {timeLeft && (
+                            <span className={`ml-2 text-xs font-semibold ${
+                              isPast
+                                ? "text-stone-400"
+                                : isUrgent
+                                ? "text-red-600 font-bold"
+                                : "text-amber-600"
+                            }`}>
+                              ({timeLeft})
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </section>
+          );
+        })()}
 
         {/* ─── 퀵 메뉴 ─────────────────────────────────── */}
         <section>
