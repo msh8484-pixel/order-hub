@@ -11,14 +11,36 @@ import {
   ClipboardList,
 } from "lucide-react";
 
+type StoreOrderStatus = {
+  id: string;
+  name: string;
+  slug: string;
+  hasOrdered: boolean;
+  orderedAt: string | null;
+  deadline: string | null;
+};
+
+function calcTimeLeft(deadlineHHMM: string, nowKST: Date): string {
+  const [h, m] = deadlineHHMM.split(":").map(Number);
+  const deadline = new Date(nowKST);
+  deadline.setHours(h, m, 0, 0);
+  const diffMs = deadline.getTime() - nowKST.getTime();
+  if (diffMs <= 0) return "마감";
+  const diffMin = Math.floor(diffMs / 60000);
+  const hours = Math.floor(diffMin / 60);
+  const mins = diffMin % 60;
+  if (hours > 0) return `${hours}시간 ${mins}분 전`;
+  return `${mins}분 전`;
+}
+
 async function getHomeData() {
   const today = new Date().toISOString().slice(0, 10);
 
   const [{ data: stores }, { data: todayOrders }, { data: products }] = await Promise.all([
-    supabase.from("stores").select("id, name, slug").order("created_at"),
+    supabase.from("stores").select("id, name, slug, order_deadline").order("created_at"),
     supabase
       .from("orders")
-      .select("id, status, store_id, order_items(quantity)")
+      .select("id, status, store_id, created_at, order_items(quantity)")
       .eq("order_date", today)
       .neq("status", "cancelled"),
     supabase.from("products").select("id, is_active").eq("is_active", true),
@@ -31,14 +53,48 @@ async function getHomeData() {
   }, 0) || 0;
   const productCount = products?.length || 0;
 
-  return { stores: stores || [], orderCount, storeCount, totalQty, productCount };
+  // 매장별 가장 최근 주문 created_at 추출
+  const latestOrderByStore = new Map<string, string>();
+  for (const o of todayOrders || []) {
+    if (!o.store_id) continue;
+    const prev = latestOrderByStore.get(o.store_id);
+    if (!prev || o.created_at > prev) {
+      latestOrderByStore.set(o.store_id, o.created_at);
+    }
+  }
+
+  const nowKST = new Date(new Date().toLocaleString("en-US", { timeZone: "Asia/Seoul" }));
+
+  const storeOrderStatus: StoreOrderStatus[] = (stores || []).map((store) => {
+    const orderedAt = latestOrderByStore.get(store.id) ?? null;
+    return {
+      id: store.id,
+      name: store.name,
+      slug: store.slug,
+      hasOrdered: !!orderedAt,
+      orderedAt: orderedAt
+        ? new Date(orderedAt).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", timeZone: "Asia/Seoul" })
+        : null,
+      deadline: store.order_deadline ?? null,
+    };
+  });
+
+  return { stores: stores || [], orderCount, storeCount, totalQty, productCount, storeOrderStatus, nowKST };
 }
 
 export default async function Home() {
-  let data = { stores: [] as { id: string; name: string; slug: string }[], orderCount: 0, storeCount: 0, totalQty: 0, productCount: 0 };
+  let data = {
+    stores: [] as { id: string; name: string; slug: string }[],
+    orderCount: 0,
+    storeCount: 0,
+    totalQty: 0,
+    productCount: 0,
+    storeOrderStatus: [] as StoreOrderStatus[],
+    nowKST: new Date(),
+  };
   try { data = await getHomeData(); } catch {}
 
-  const { stores, orderCount, storeCount, totalQty, productCount } = data;
+  const { stores, orderCount, storeCount, totalQty, productCount, storeOrderStatus, nowKST } = data;
 
   const today = new Date();
   const dateStr = today.toLocaleDateString("ko-KR", { month: "long", day: "numeric", weekday: "short" });
@@ -78,6 +134,48 @@ export default async function Home() {
             <StatCard icon={ShoppingBag} label="활성 상품" value={productCount} unit="종" color="stone" />
           </div>
         </section>
+
+        {/* ─── 오늘 발주 현황 ─────────────────────────── */}
+        {storeOrderStatus.length > 0 && (
+          <section>
+            <p className="text-stone-400 text-xs font-semibold uppercase tracking-wider mb-3">오늘 발주 현황</p>
+            <div className="bg-white rounded-2xl border border-stone-200 divide-y divide-stone-100">
+              {storeOrderStatus.map((s) => {
+                const timeLeft = s.deadline ? calcTimeLeft(s.deadline, nowKST) : null;
+                const isPast = timeLeft === "마감";
+                return (
+                  <div key={s.id} className="flex items-center justify-between px-4 py-3 gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      {s.hasOrdered ? (
+                        <span className="shrink-0 inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 text-xs font-semibold px-2.5 py-1 rounded-full">
+                          ✅ 완료
+                        </span>
+                      ) : (
+                        <span className="shrink-0 inline-flex items-center gap-1 bg-red-50 text-red-700 text-xs font-semibold px-2.5 py-1 rounded-full">
+                          ❌ 미발주
+                        </span>
+                      )}
+                      <span className="text-stone-800 text-sm font-semibold truncate">{s.name}</span>
+                      {s.hasOrdered && s.orderedAt && (
+                        <span className="text-stone-400 text-xs">{s.orderedAt} 입력</span>
+                      )}
+                    </div>
+                    {s.deadline && (
+                      <div className="shrink-0 text-right">
+                        <span className="text-stone-500 text-xs">마감 {s.deadline}</span>
+                        {timeLeft && (
+                          <span className={`ml-2 text-xs font-semibold ${isPast ? "text-stone-400" : "text-amber-600"}`}>
+                            ({timeLeft})
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        )}
 
         {/* ─── 퀵 메뉴 ─────────────────────────────────── */}
         <section>
