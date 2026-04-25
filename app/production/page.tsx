@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
+import { Printer } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
 type ProductionItem = {
@@ -179,6 +180,26 @@ export default function ProductionPage() {
 
   return (
     <div className="min-h-screen bg-stone-50 pb-20">
+      <style>{`
+        @media print {
+          .no-print { display: none !important; }
+          .print-only { display: block !important; }
+          nav, footer { display: none !important; }
+          body { font-size: 12px; margin: 0; padding: 0; }
+          .min-h-screen { min-height: unset; padding-bottom: 0; }
+          .pb-20 { padding-bottom: 0 !important; }
+          @page { margin: 15mm 10mm; }
+        }
+        .print-only { display: none; }
+      `}</style>
+
+      {/* 인쇄용 헤더 — 화면에서는 숨김 */}
+      <div className="print-only px-6 pt-4 pb-2 border-b border-stone-300 mb-4">
+        <h1 className="text-lg font-bold text-stone-900">생산 작업 지시서</h1>
+        <p className="text-sm text-stone-500">{todayLabel} — 총 {totalPieces.toLocaleString()}개 생산</p>
+        <p className="text-xs text-stone-400 mt-1">출력: {new Date().toLocaleString("ko-KR")}</p>
+      </div>
+
       {/* 헤더 */}
       <div className="no-print sticky top-0 z-10 bg-white border-b border-stone-200 px-4 py-3">
         <div className="flex items-center justify-between mb-2">
@@ -186,7 +207,16 @@ export default function ProductionPage() {
             <h1 className="text-stone-900 font-bold text-base">생산 현황</h1>
             <p className="text-stone-400 text-xs">{todayLabel} — 총 {totalPieces.toLocaleString()}개 생산</p>
           </div>
-          <button onClick={load} className="text-emerald-700 text-sm font-medium">갱신</button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => window.print()}
+              className="flex items-center gap-1.5 bg-emerald-700 hover:bg-emerald-800 text-white text-sm px-3 py-1.5 rounded-lg font-medium transition-colors"
+            >
+              <Printer size={14} />
+              인쇄
+            </button>
+            <button onClick={load} className="text-emerald-700 text-sm font-medium">갱신</button>
+          </div>
         </div>
         <div className="flex gap-1 bg-stone-100 rounded-lg p-1">
           {([["total", "전체 총량"], ["store", "매장별"], ["print", "인쇄용 표"]] as [Tab, string][]).map(([key, label]) => (
