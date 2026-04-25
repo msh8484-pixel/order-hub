@@ -609,7 +609,7 @@ function CostsTab() {
 
   // ── 원가 입력 폼 화면 ──
   return (
-    <div className="pb-32">
+    <div className="pb-40">
       {/* 서브 헤더 */}
       <div className="px-4 pt-4 pb-3 flex items-center gap-3 border-b border-stone-100 bg-white sticky top-[101px] z-[5]">
         <button onClick={closeCost} className="text-stone-400 text-sm px-2 py-1 rounded-lg bg-stone-100">← 목록</button>
@@ -640,73 +640,67 @@ function CostsTab() {
           </div>
 
           <div className="space-y-2">
-            {/* 컬럼 헤더 */}
-            <div className="grid grid-cols-[1fr_52px_72px_72px_32px] gap-1 px-1">
-              <p className="text-stone-400 text-[10px] font-medium">재료명</p>
-              <p className="text-stone-400 text-[10px] font-medium text-center">단위</p>
-              <p className="text-stone-400 text-[10px] font-medium text-right">단가(원)</p>
-              <p className="text-stone-400 text-[10px] font-medium text-right">소요량</p>
-              <p className="text-stone-400 text-[10px] font-medium text-center">-</p>
-            </div>
-
             {cost.materials.map((m, i) => (
-              <div key={i} className="bg-white rounded-xl border border-stone-200 p-2.5 space-y-2">
-                <div className="grid grid-cols-[1fr_52px_72px_72px_32px] gap-1 items-center">
-                  {/* 재료명 */}
+              <div key={i} className="bg-white rounded-xl border border-stone-200 p-3 space-y-2">
+                {/* 1행: 재료명 + 단위 + 삭제 */}
+                <div className="flex items-center gap-2">
                   <input
                     type="text"
                     value={m.name}
                     onChange={(e) => updateMaterial(i, "name", e.target.value)}
-                    placeholder="예: 쑥가루"
-                    className="bg-stone-50 border border-stone-200 rounded-lg px-2 py-1.5 text-xs text-stone-900 placeholder-stone-300 outline-none focus:ring-1 focus:ring-emerald-500"
+                    placeholder="재료명 (예: 쑥가루)"
+                    className="flex-1 min-w-0 bg-stone-50 border border-stone-200 rounded-lg px-3 py-2 text-sm text-stone-900 placeholder-stone-300 outline-none focus:ring-1 focus:ring-emerald-500"
                   />
-                  {/* 단위 */}
                   <select
                     value={m.unit}
                     onChange={(e) => updateMaterial(i, "unit", e.target.value)}
-                    className="bg-stone-50 border border-stone-200 rounded-lg px-1 py-1.5 text-xs text-stone-900 outline-none focus:ring-1 focus:ring-emerald-500 text-center"
+                    className="w-16 bg-stone-50 border border-stone-200 rounded-lg px-1 py-2 text-sm text-stone-900 outline-none focus:ring-1 focus:ring-emerald-500 text-center shrink-0"
                   >
                     {MATERIAL_UNITS.map((u) => (
                       <option key={u} value={u}>{u}</option>
                     ))}
                   </select>
-                  {/* 단가 */}
-                  <input
-                    type="number"
-                    min={0}
-                    value={m.unit_price === 0 ? "" : m.unit_price}
-                    onChange={(e) => updateMaterial(i, "unit_price", parseFloat(e.target.value) || 0)}
-                    placeholder="0"
-                    className="bg-stone-50 border border-stone-200 rounded-lg px-2 py-1.5 text-xs text-stone-900 text-right font-mono outline-none focus:ring-1 focus:ring-emerald-500"
-                  />
-                  {/* 소요량 */}
-                  <input
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    value={m.amount === 0 ? "" : m.amount}
-                    onChange={(e) => updateMaterial(i, "amount", parseFloat(e.target.value) || 0)}
-                    placeholder="0"
-                    className="bg-stone-50 border border-stone-200 rounded-lg px-2 py-1.5 text-xs text-stone-900 text-right font-mono outline-none focus:ring-1 focus:ring-emerald-500"
-                  />
-                  {/* 삭제 */}
                   <button
                     onClick={() => removeMaterial(i)}
                     disabled={cost.materials.length <= 1}
-                    className="w-7 h-7 flex items-center justify-center rounded-lg bg-red-50 text-red-400 border border-red-100 disabled:opacity-30 text-xs"
+                    className="w-8 h-8 flex items-center justify-center rounded-lg bg-red-50 text-red-400 border border-red-100 disabled:opacity-30 text-sm shrink-0"
                   >
                     ✕
                   </button>
                 </div>
-                {/* 재료별 소계 */}
-                {(m.unit_price > 0 || m.amount > 0) && (
-                  <div className="flex justify-end">
-                    <span className="text-stone-400 text-[10px] font-mono">
-                      {m.unit_price.toLocaleString()} × {m.amount} {m.unit} = {" "}
-                      <span className="text-stone-700 font-semibold">{calcMaterialCost(m).toLocaleString()}원</span>
-                    </span>
+                {/* 2행: 단가 + 소요량 + 소계 */}
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 relative">
+                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-stone-400 text-xs pointer-events-none">단가</span>
+                    <input
+                      type="number"
+                      min={0}
+                      value={m.unit_price === 0 ? "" : m.unit_price}
+                      onChange={(e) => updateMaterial(i, "unit_price", parseFloat(e.target.value) || 0)}
+                      placeholder="0"
+                      className="w-full bg-stone-50 border border-stone-200 rounded-lg pl-9 pr-2 py-2 text-sm text-stone-900 text-right font-mono outline-none focus:ring-1 focus:ring-emerald-500"
+                    />
                   </div>
-                )}
+                  <div className="flex-1 relative">
+                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-stone-400 text-xs pointer-events-none">소요</span>
+                    <input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={m.amount === 0 ? "" : m.amount}
+                      onChange={(e) => updateMaterial(i, "amount", parseFloat(e.target.value) || 0)}
+                      placeholder="0"
+                      className="w-full bg-stone-50 border border-stone-200 rounded-lg pl-9 pr-2 py-2 text-sm text-stone-900 text-right font-mono outline-none focus:ring-1 focus:ring-emerald-500"
+                    />
+                  </div>
+                  <div className="w-20 text-right shrink-0">
+                    {(m.unit_price > 0 && m.amount > 0) ? (
+                      <span className="text-emerald-700 text-sm font-bold font-mono">{calcMaterialCost(m).toLocaleString()}원</span>
+                    ) : (
+                      <span className="text-stone-300 text-sm">—</span>
+                    )}
+                  </div>
+                </div>
               </div>
             ))}
 
@@ -845,7 +839,7 @@ function CostsTab() {
       </div>
 
       {/* 저장 버튼 (fixed) */}
-      <div className="fixed bottom-0 left-0 right-0 px-4 pb-8 pt-3 bg-white border-t border-stone-100 z-10">
+      <div className="fixed bottom-16 md:bottom-0 left-0 right-0 md:left-60 px-4 pb-4 pt-3 bg-white border-t border-stone-100 z-[55]">
         <button
           onClick={saveCost}
           disabled={saving}
