@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist } from "next/font/google";
 import "./globals.css";
 import BottomNav from "@/components/BottomNav";
+import TopNav from "@/components/TopNav";
 
 const geist = Geist({ variable: "--font-geist", subsets: ["latin"] });
 
@@ -27,8 +28,11 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="ko" className={geist.variable}>
-      <body className="min-h-screen bg-stone-50 text-stone-900 antialiased pb-16">
-        {children}
+      <body className="min-h-screen bg-stone-50 text-stone-900 antialiased pb-16 md:pb-0 md:pt-16">
+        <TopNav />
+        <div className="md:max-w-5xl md:mx-auto">
+          {children}
+        </div>
         <BottomNav />
       </body>
     </html>

@@ -193,7 +193,7 @@ export default function StorePage() {
   return (
     <div className="min-h-screen bg-stone-50">
       {/* 헤더 */}
-      <div className="sticky top-0 z-10 bg-white border-b border-stone-200 px-4 py-3">
+      <div className="sticky top-0 md:top-16 z-10 bg-white border-b border-stone-200 px-4 py-3">
         <h1 className="text-stone-900 font-bold text-base">{store?.name || "..."} 발주</h1>
         <p className="text-stone-400 text-xs">마감: {store?.order_deadline?.slice(0, 5) || "14:00"} 이전</p>
       </div>

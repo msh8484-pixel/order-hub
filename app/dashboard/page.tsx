@@ -181,7 +181,7 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-stone-50 pb-20">
       {/* 헤더 */}
-      <div className="sticky top-0 z-20 bg-white border-b border-stone-200">
+      <div className="sticky top-0 md:top-16 z-20 bg-white border-b border-stone-200">
         <div className="px-4 pt-3 pb-2 flex items-center justify-between">
           <div>
             <h1 className="text-stone-900 font-bold text-base">사장님 대시보드</h1>
