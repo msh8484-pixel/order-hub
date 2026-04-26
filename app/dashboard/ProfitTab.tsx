@@ -268,7 +268,7 @@ export default function ProfitTab() {
             <BarChart data={barData} margin={{ top: 0, right: 0, left: -20, bottom: 0 }}>
               <XAxis dataKey="name" tick={{ fontSize: 10 }} interval={0} angle={-30} textAnchor="end" height={45} />
               <YAxis tick={{ fontSize: 10 }} />
-              <Tooltip formatter={(v: number) => `${v}만원`} />
+              <Tooltip formatter={(v) => v != null ? `${Math.round(Number(v))}만원` : ""} />
               <Bar dataKey="매출" fill="#e2e8f0" radius={[3, 3, 0, 0]} />
               <Bar dataKey="원가" fill="#fca5a5" radius={[3, 3, 0, 0]} />
               <Bar dataKey="순이익" fill="#059669" radius={[3, 3, 0, 0]} />
@@ -291,10 +291,10 @@ export default function ProfitTab() {
           <p className="text-stone-700 font-bold text-sm mb-3">카테고리별 순이익 비중</p>
           <ResponsiveContainer width="100%" height={200}>
             <PieChart>
-              <Pie data={pieData} cx="50%" cy="50%" outerRadius={80} dataKey="value" label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false} fontSize={10}>
+              <Pie data={pieData} cx="50%" cy="50%" outerRadius={80} dataKey="value" label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`} labelLine={false} fontSize={10}>
                 {pieData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />)}
               </Pie>
-              <Tooltip formatter={(v: number) => `${v}만원`} />
+              <Tooltip formatter={(v) => v != null ? `${Math.round(Number(v))}만원` : ""} />
             </PieChart>
           </ResponsiveContainer>
         </div>

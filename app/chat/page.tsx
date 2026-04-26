@@ -34,7 +34,7 @@ export default function ChatListPage() {
               .eq("room_id", room.id)
               .order("created_at", { ascending: false })
               .limit(1)
-              .single();
+              .maybeSingle();
 
             return {
               ...room,

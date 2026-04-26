@@ -33,7 +33,7 @@ type TodayOrder = {
   items: { product_name: string; quantity: number }[];
 };
 
-const CATEGORY_ORDER = ["쑥인절미", "약밥", "무설탕", "개떡", "찹쌀떡", "찰떡", "설기", "현미", "음료", "답례떡"];
+const CATEGORY_ORDER = ["쑥인절미", "약밥", "무설탕", "개떡", "찹쌀떡", "찰떡", "설기", "현미", "음료", "답례떡", "기타"];
 
 const STATUS_LABEL: Record<string, string> = {
   pending: "접수",
@@ -223,7 +223,7 @@ export default function StorePage() {
                 {orderId ? "발주 수정 완료!" : "발주 완료!"}
               </h2>
               <p className="text-stone-400 text-sm mb-2">{store?.name} · {senderName}</p>
-              <p className="text-stone-400 text-sm mb-8">총 {submittedItems.length}개 품목이 전송됐습니다</p>
+              <p className="text-stone-400 text-sm mb-8">총 {submittedItems.reduce((s, i) => s + i.quantity, 0)}개가 전송됐습니다</p>
               <ul className="text-left w-full max-w-xs space-y-1 mb-8">
                 {submittedItems.map((item) => (
                   <li key={item.product_id} className="flex justify-between text-sm">
@@ -320,7 +320,7 @@ export default function StorePage() {
               </div>
 
               {/* 발주 전송 버튼 — 글로벌 네비(bottom-0~16) 바로 위 */}
-              <div className="fixed bottom-16 left-0 right-0 z-[55] bg-white border-t border-stone-200 px-4 pt-3 pb-3 space-y-2">
+              <div className="fixed bottom-16 left-0 md:left-60 right-0 z-[55] bg-white border-t border-stone-200 px-4 pt-3 pb-3 space-y-2">
                 {error && <p className="text-red-500 text-sm text-center">{error}</p>}
                 {!isBeforeDeadline() ? (
                   <div className="w-full bg-stone-100 text-stone-400 font-bold py-3.5 rounded-2xl text-center text-sm">
