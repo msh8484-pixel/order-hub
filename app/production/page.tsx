@@ -209,7 +209,7 @@ export default function ProductionPage() {
           </div>
           <div className="flex items-center gap-2">
             <button
-              onClick={() => window.print()}
+              onClick={() => { setTab("print"); setTimeout(() => window.print(), 100); }}
               className="flex items-center gap-1.5 bg-emerald-700 hover:bg-emerald-800 text-white text-sm px-3 py-1.5 rounded-lg font-medium transition-colors"
             >
               <Printer size={14} />

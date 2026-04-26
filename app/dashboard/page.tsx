@@ -114,7 +114,6 @@ export default function DashboardPage() {
       .from("orders")
       .select(`id, status, created_at, store_id, stores(name), order_items(product_name, quantity, products(pieces_per_unit, category))`)
       .eq("order_date", selectedDate)
-      .eq("source", "store")
       .neq("status", "cancelled")
       .order("created_at", { ascending: false });
 
@@ -122,7 +121,7 @@ export default function DashboardPage() {
 
     setOrders((orderData || []).map((row: any) => ({
       store_id: row.store_id,
-      store_name: row.stores?.name || "알 수 없음",
+      store_name: row.stores?.name || row.source || "온라인",
       order_id: row.id,
       status: row.status,
       submitted_at: row.created_at,

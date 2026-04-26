@@ -312,6 +312,13 @@ function ProductsTab() {
     if (items.length > 0) acc[cat] = items;
     return acc;
   }, {});
+  // CATEGORIES에 없는 커스텀 카테고리 추가
+  for (const p of products) {
+    if (!CATEGORIES.includes(p.category) && p.category) {
+      if (!grouped[p.category]) grouped[p.category] = [];
+      grouped[p.category].push(p);
+    }
+  }
 
   return (
     <div>
